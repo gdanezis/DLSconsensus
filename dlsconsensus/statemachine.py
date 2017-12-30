@@ -1,6 +1,18 @@
+from collections import namedtuple
+
+PHASE0 = namedtuple("PHASE0", ["type", "acceptable", "phase", "sender"])
+PHASE1LOCK = namedtuple("PHASE1LOCK", ["type", "item", "phase", "evidence", "sender"])
+PHASE2ACK = namedtuple("PHASE2ACK", ["type", "item", "phase", "sender"])
+RELEASE3 = namedtuple("RELEASE3", ["type", "evidence", "sender"])
+
 
 class dls_state_machine():
     """ A class representing all state of the DLS state machine for a single round. """
+
+    PHASE0 = "PHASE0"
+    PHASE1LOCK = "PHASE1LOCK"
+    PHASE2ACK = "PHASE2ACK"
+    RELEASE3 = "RELEASE3"
 
     def __init__(self, my_vi, my_id, N):
         assert 0 <= my_id < N 
@@ -36,7 +48,34 @@ class dls_state_machine():
         return xround % 4
 
     def check_phase1msg(self, msg):
-        return True # TODO: check this!!!
+
+        # Check the basic format.
+        if not (msg[0] == self.PHASE1LOCK and len(msg) == 5):
+            return False
+
+        (_, item, k, evidence, sender) = msg
+
+        # Only the leader can send in a specific phase.
+        if not (sender == self.get_leader_phase(k)):
+            return False
+
+        # Check all votes are valid.
+        votes = set()
+        for e in evidence:
+            if not (e[0] == self.PHASE0 and len(e) == 4):
+                return False
+
+            (_, acc, kp, sender2) = e
+            if not (kp == k and item in acc):
+                return False
+
+            votes.add(sender2)
+
+        # Check quorum
+        if not (len(votes) >= (self.N - self.f)):
+            return False
+
+        return True
 
     def get_acceptable(self):
         if self.decision != None:
@@ -53,7 +92,7 @@ class dls_state_machine():
     def process_trying_0(self):
         acceptable = self.get_acceptable()
         k = self.get_phase_k(self.round)
-        msg = ("PHASE0", acceptable, k, self.i)
+        msg = PHASE0("PHASE0", acceptable, k, self.i)
         self.buf_out |= set(( msg, ))
 
         if self.i == self.get_leader(self.round):
@@ -68,7 +107,7 @@ class dls_state_machine():
             evidence = {}
 
             for msg in self.buf_in:
-                if msg[0] == "PHASE0" and msg[2] == k:
+                if msg[0] == self.PHASE0 and msg[2] == k:
                     acceptable = msg[1]
 
                     for acc in acceptable:
@@ -87,7 +126,8 @@ class dls_state_machine():
             if len(evidence) > 0:
                 # Chose arbitrarily.
                 item = list(sorted(evidence))[0]
-                msg = ("PHASE1LOCK", item, k, tuple(evidence[item][1]), self.i)
+                evidence = tuple(evidence[item][1])
+                msg = PHASE1LOCK(self.PHASE1LOCK, item, k, evidence, self.i)
                 self.buf_in.add(msg)
                 self.buf_out.add(msg)
 
@@ -96,12 +136,12 @@ class dls_state_machine():
     def process_trying_2(self):
         k = self.get_phase_k(self.round)
         for msg in list(self.buf_in):
-            if msg[0] == "PHASE1LOCK" and msg[2] == k and self.check_phase1msg(msg):
+            if msg[0] == self.PHASE1LOCK and msg[2] == k and self.check_phase1msg(msg):
                 item = msg[1]
 
                 self.locks[item] = msg
 
-                ack = ("PHASE2ACK", item, k, self.i)
+                ack = PHASE2ACK(self.PHASE2ACK, item, k, self.i)
                 self.buf_out.add(ack)
 
                 if self.i == self.get_leader(self.round):
@@ -112,14 +152,14 @@ class dls_state_machine():
         for l in self.locks:
             assert len(self.locks[l]) == 5
 
-            msg = ("RELEASE3", self.locks[l], self.i)
+            msg = RELEASE3(self.RELEASE3, self.locks[l], self.i)
             self.buf_out.add( msg )
             self.buf_in.add( msg )
 
     # Those can be run at all phases!
     def process_release_locks(self):
         for msg in self.buf_in:
-            if msg[0] == "RELEASE3" and self.check_phase1msg(msg[1]):
+            if msg[0] == self.RELEASE3 and self.check_phase1msg(msg[1]):
                 # CHECK this is a valid PHASE1LOCK
                 lock = msg[1]
                 (_, w, hp, _, _) = lock
@@ -131,7 +171,7 @@ class dls_state_machine():
         all_acks = {}
         for msg in self.buf_in:
             # Only process acks for own phases
-            if msg[0] == "PHASE2ACK" and self.get_leader_phase(msg[2]) == self.i:
+            if msg[0] == self.PHASE2ACK and self.get_leader_phase(msg[2]) == self.i:
                 (_, item, k, i) = msg
                 if item not in all_acks:
                     all_acks[item] = set()
@@ -145,7 +185,7 @@ class dls_state_machine():
 
     def find_seen(self):
         for msg in self.buf_in:
-            if msg[0] == "PHASE0":
+            if msg[0] == self.PHASE0:
                 acceptable = msg[1] 
                 self.all_seen |= set(acceptable)
 

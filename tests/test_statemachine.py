@@ -1,7 +1,9 @@
 import sys
 sys.path = [".", ".."] + sys.path
 
-from dlsconsensus import dls_state_machine
+from dlsconsensus import dls_state_machine, PHASE0, PHASE1LOCK, PHASE2ACK, RELEASE3
+
+dlsc = dls_state_machine
 
 def test_phase0_init():
     dls = dls_state_machine(my_vi="Hello", my_id=0, N=4)
@@ -14,9 +16,9 @@ def test_phase0_init():
 
 def test_phase1_empty_locks():
     buf_in = set()
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 0)  )    
-    buf_in.add(  ("PHASE0", ("hello1",), 0, 1)  )    
-    buf_in.add(  ("PHASE0", ("hello2",), 0, 2)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 0)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello1",), 0, 1)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello2",), 0, 2)  )    
 
     dls = dls_state_machine(my_vi="Hello", my_id=0, N=4)
     dls.buf_in |= buf_in
@@ -26,24 +28,24 @@ def test_phase1_empty_locks():
 
 def test_phase1_seen():
     buf_in = set()
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 0)  )    
-    buf_in.add(  ("PHASE0", ("hello1",), 0, 1)  )    
-    buf_in.add(  ("PHASE0", ("hello2",), 0, 2)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 0)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello1",), 0, 1)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello2",), 0, 2)  )    
 
     dls = dls_state_machine(my_vi="hello0", my_id=0, N=4)
     dls.buf_in |= buf_in
 
     dls.process_round()
-    assert len(dls.buf_out) == 1 # The "PHASE0" message
+    assert len(dls.buf_out) == 1 # The dlsc.PHASE0 message
 
     # Did we increase our acceptable set?
     assert len(dls.all_seen) == 3
 
 def test_phase1_one_locks():
     buf_in = set()
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 0)  )    
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 1)  )    
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 2)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 0)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 1)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 2)  )    
 
     dls = dls_state_machine(my_vi="Hello", my_id=0, N=4)
     dls.buf_in |= buf_in
@@ -53,9 +55,9 @@ def test_phase1_one_locks():
 
 def test_phase1_one_locks_process():
     buf_in = set()
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 0)  )    
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 1)  )    
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 2)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 0)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 1)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 2)  )    
 
     dls = dls_state_machine(my_vi="Hello", my_id=0, N=4)
     dls.buf_in |= buf_in
@@ -66,9 +68,9 @@ def test_phase1_one_locks_process():
 
 def test_phase1_not_turn():
     buf_in = set()
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 0)  )    
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 1)  )    
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 2)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 0)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 1)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 2)  )    
 
     dls = dls_state_machine(my_vi="Hello", my_id=1, N=4)
     dls.buf_in |= buf_in
@@ -78,11 +80,11 @@ def test_phase1_not_turn():
 
 def test_phase1_one_locks_phase2():
     buf_in = set()
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 0)  )    
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 1)  )    
-    buf_in.add(  ("PHASE0", ("hello0",), 0, 2)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 0)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 1)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 2)  )    
 
-    msg = ("PHASE1LOCK", "hello0", 0, tuple(buf_in), 0)
+    msg = (dlsc.PHASE1LOCK, "hello0", 0, tuple(buf_in), 0)
 
     dls = dls_state_machine(my_vi="Hello", my_id=0, N=4)
     dls.buf_in |= set([ msg ])
@@ -94,13 +96,13 @@ def test_phase1_one_locks_phase2():
 
 def test_phase1_one_locks_phase2_evil():
     buf_in = set()
-    buf_in.add(  ("PHASE0", ("hello0","hello1"), 0, 0)  )    
-    buf_in.add(  ("PHASE0", ("hello0","hello1"), 0, 1)  )    
-    buf_in.add(  ("PHASE0", ("hello0","hello1"), 0, 2)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0","hello1"), 0, 0)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0","hello1"), 0, 1)  )    
+    buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0","hello1"), 0, 2)  )    
 
     # That is byzantine
-    msg = [ ("PHASE1LOCK", "hello0", 0, tuple(buf_in), 0) ] 
-    msg += [ ("PHASE1LOCK", "hello1", 0, tuple(buf_in), 0) ] 
+    msg = [ PHASE1LOCK(dlsc.PHASE1LOCK, "hello0", 0, tuple(buf_in), 0) ] 
+    msg += [ PHASE1LOCK(dlsc.PHASE1LOCK, "hello1", 0, tuple(buf_in), 0) ] 
 
     dls = dls_state_machine(my_vi="Hello", my_id=0, N=4)
     dls.buf_in |= set( msg )
@@ -109,7 +111,7 @@ def test_phase1_one_locks_phase2_evil():
     dls.process_round()
     assert len(dls.buf_out) == 2
     for m in dls.buf_out:
-        assert m[0] == "PHASE2ACK"
+        assert m[0] == dlsc.PHASE2ACK
 
     # Does it have 2 locks?
     assert len(dls.locks) == 2
