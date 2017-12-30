@@ -92,7 +92,7 @@ class dls_state_machine():
     def process_trying_0(self):
         acceptable = self.get_acceptable()
         k = self.get_phase_k(self.round)
-        msg = PHASE0("PHASE0", acceptable, k, self.i)
+        msg = PHASE0(self.PHASE0, acceptable, k, self.i)
         self.buf_out |= set(( msg, ))
 
         if self.i == self.get_leader(self.round):
@@ -107,25 +107,31 @@ class dls_state_machine():
             evidence = {}
 
             for msg in self.buf_in:
-                if msg[0] == self.PHASE0 and msg[2] == k:
-                    acceptable = msg[1]
+                if msg.type == self.PHASE0 and msg.phase == k:
+                    acceptable = msg.acceptable
 
                     for acc in acceptable:
                         if acc not in evidence:
                             evidence[acc] = (set(), set())
                         
                         votes, evid_set = evidence[acc]
-                        votes |= set([ msg[3] ])
+                        votes |= set([ msg.sender ])
                         evid_set |= set([ msg ])
 
             # Prune those with enough evidence:
             for acc in evidence.keys():
-                if len(evidence[acc][0]) < self.N - self.f:
+                votes, _ = evidence[acc]
+                if len(votes) < self.N - self.f:
                     del evidence[acc]
 
             if len(evidence) > 0:
-                # Chose arbitrarily.
-                item = list(sorted(evidence))[0]
+                if self.vi in evidence:
+                    # prefer our own.
+                    item = self.vi
+                else:
+                    # Chose arbitrarily.
+                    item = max(evidence)
+
                 evidence = tuple(evidence[item][1])
                 msg = PHASE1LOCK(self.PHASE1LOCK, item, k, evidence, self.i)
                 self.buf_in.add(msg)
@@ -136,8 +142,8 @@ class dls_state_machine():
     def process_trying_2(self):
         k = self.get_phase_k(self.round)
         for msg in list(self.buf_in):
-            if msg[0] == self.PHASE1LOCK and msg[2] == k and self.check_phase1msg(msg):
-                item = msg[1]
+            if msg.type == self.PHASE1LOCK and msg.phase == k and self.check_phase1msg(msg):
+                item = msg.item
 
                 self.locks[item] = msg
 
@@ -159,9 +165,9 @@ class dls_state_machine():
     # Those can be run at all phases!
     def process_release_locks(self):
         for msg in self.buf_in:
-            if msg[0] == self.RELEASE3 and self.check_phase1msg(msg[1]):
+            if msg.type == self.RELEASE3 and self.check_phase1msg(msg.evidence):
                 # CHECK this is a valid PHASE1LOCK
-                lock = msg[1]
+                lock = msg.evidence
                 (_, w, hp, _, _) = lock
                 for v, (_, _, h,_, _) in self.locks.items():
                     if v != w and hp >= h:
@@ -171,22 +177,18 @@ class dls_state_machine():
         all_acks = {}
         for msg in self.buf_in:
             # Only process acks for own phases
-            if msg[0] == self.PHASE2ACK and self.get_leader_phase(msg[2]) == self.i:
-                (_, item, k, i) = msg
-                if item not in all_acks:
-                    all_acks[item] = set()
-                all_acks[item].add( i )
+            if msg.type == self.PHASE2ACK and self.get_leader_phase(msg.phase) == self.i:
+                if msg.item not in all_acks:
+                    all_acks[msg.item] = set()
+                all_acks[msg.item].add( msg.sender )
 
-                if len(all_acks[item]) >= self.N - self.f:
-                    if self.decision != None:
-                        assert item == self.decision
-
-                    self.decision = item
+                if len(all_acks[msg.item]) >= self.N - self.f:
+                    self.decision = msg.item
 
     def find_seen(self):
         for msg in self.buf_in:
-            if msg[0] == self.PHASE0:
-                acceptable = msg[1] 
+            if msg.type == self.PHASE0:
+                acceptable = msg.acceptable 
                 self.all_seen |= set(acceptable)
 
     def do_background(self):

@@ -84,7 +84,7 @@ def test_phase1_one_locks_phase2():
     buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 1)  )    
     buf_in.add(  PHASE0(dlsc.PHASE0, ("hello0",), 0, 2)  )    
 
-    msg = (dlsc.PHASE1LOCK, "hello0", 0, tuple(buf_in), 0)
+    msg = PHASE1LOCK(dlsc.PHASE1LOCK, "hello0", 0, tuple(buf_in), 0)
 
     dls = dls_state_machine(my_vi="Hello", my_id=0, N=4)
     dls.buf_in |= set([ msg ])
@@ -159,5 +159,5 @@ def test_f_failures():
         for n in nodes:
             n.buf_in |= all_messages
 
-    assert set([nx.decision for nx in nodes[:3]]) == set(["Hello0"])
-    assert set([nx.decision for nx in nodes]) == set(["Hello0", None])
+    assert set([nx.decision for nx in nodes[:3]]) == set(["Hello1"])
+    assert set([nx.decision for nx in nodes]) == set(["Hello1", None])
