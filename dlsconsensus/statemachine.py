@@ -53,23 +53,20 @@ class dls_state_machine():
         if not (msg.type == self.PHASE1LOCK and len(msg) == 5):
             return False
 
-        (_, item, k, evidence, sender) = msg
-
         # Only the leader can send in a specific phase.
-        if not (sender == self.get_leader_phase(k)):
+        if not (msg.sender == self.get_leader_phase(msg.phase)):
             return False
 
         # Check all votes are valid.
         votes = set()
-        for e in evidence:
-            if not (e[0] == self.PHASE0 and len(e) == 4):
+        for e in msg.evidence:
+            if not (e.type == self.PHASE0 and len(e) == 4):
                 return False
 
-            (_, acc, kp, sender2) = e
-            if not (kp == k and item in acc):
+            if not (e.phase == msg.phase and msg.item in e.acceptable):
                 return False
 
-            votes.add(sender2)
+            votes.add(e.sender)
 
         # Check quorum
         if not (len(votes) >= (self.N - self.f)):
@@ -108,9 +105,7 @@ class dls_state_machine():
 
             for msg in self.buf_in:
                 if msg.type == self.PHASE0 and msg.phase == k:
-                    acceptable = msg.acceptable
-
-                    for acc in acceptable:
+                    for acc in msg.acceptable:
                         if acc not in evidence:
                             evidence[acc] = (set(), set())
                         
@@ -166,12 +161,10 @@ class dls_state_machine():
     def process_release_locks(self):
         for msg in self.buf_in:
             if msg.type == self.RELEASE3 and self.check_phase1msg(msg.evidence):
-                # CHECK this is a valid PHASE1LOCK
-                lock = msg.evidence
-                (_, w, hp, _, _) = lock
-                for v, (_, _, h,_, _) in self.locks.items():
-                    if v != w and hp >= h:
-                        del self.locks[v]
+                new_lock = msg.evidence
+                for old_lock in self.locks.values():
+                    if old_lock.item != new_lock.item and new_lock.phase >= old_lock.phase:
+                        del self.locks[old_lock.item]
 
     def process_acks(self):
         all_acks = {}
@@ -188,8 +181,7 @@ class dls_state_machine():
     def find_seen(self):
         for msg in self.buf_in:
             if msg.type == self.PHASE0:
-                acceptable = msg.acceptable 
-                self.all_seen |= set(acceptable)
+                self.all_seen |= set(msg.acceptable)
 
     def do_background(self):
         self.find_seen()
