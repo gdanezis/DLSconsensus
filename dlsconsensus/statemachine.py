@@ -50,7 +50,7 @@ class dls_state_machine():
     def check_phase1msg(self, msg):
 
         # Check the basic format.
-        if not (msg[0] == self.PHASE1LOCK and len(msg) == 5):
+        if not (msg.type == self.PHASE1LOCK and len(msg) == 5):
             return False
 
         (_, item, k, evidence, sender) = msg
