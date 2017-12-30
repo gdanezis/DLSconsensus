@@ -1,3 +1,4 @@
+
 class dls_state_machine():
     """ A class representing all state of the DLS state machine for a single round. """
 
@@ -43,10 +44,10 @@ class dls_state_machine():
 
         if len(self.locks) == 0:
             return tuple(self.all_seen)
-        elif len(self.locks) == 0:
+        elif len(self.locks) == 1:
             return ( self.locks.keys()[0], )
         else:
-            return ( )
+            assert False
 
 
     def process_trying_0(self):
@@ -165,6 +166,8 @@ class dls_state_machine():
         self.round += 1
 
 
+
+
 def test_phase0_init():
     dls = dls_state_machine(my_vi="Hello", my_id=0, N=4)
 
@@ -279,5 +282,45 @@ def test_phase1_one_locks_phase2_evil():
     dls.process_round()
     dls.process_round()
     
-    assert len(dls.locks) == 0    
-    
+    assert len(dls.locks) == 0
+
+def test_perfect_net_conditions():
+    # In this test we simulate a perfectly synchronous network.
+    N = 4
+    nodes = []
+    for i in range(N):
+        dls = dls_state_machine(my_vi="Hello%s" % i, my_id=i, N=4)
+        nodes += [ dls ]
+
+    # In each round simulate behavious.
+    for r in range(50):
+        all_messages = set()
+        for n in nodes:
+            n.process_round()
+            all_messages |= n.buf_out
+        for n in nodes:
+            n.buf_in |= all_messages
+
+    assert len(set([nx.decision for nx in nodes])) == 1
+
+
+def test_f_failures():
+    # In this test we simulate a perfectly synchronous network.
+    N = 4
+    nodes = []
+    for i in range(N):
+        dls = dls_state_machine(my_vi="Hello%s" % i, my_id=i, N=4)
+        nodes += [ dls ]
+
+    # In each round simulate behavious.
+    for r in range(50):
+        all_messages = set()
+        for n in nodes:
+            n.process_round()
+            if n.i < n.N - n.f:
+                all_messages |= n.buf_out
+        for n in nodes:
+            n.buf_in |= all_messages
+
+    assert set([nx.decision for nx in nodes[:3]]) == set(["Hello0"])
+    assert set([nx.decision for nx in nodes]) == set(["Hello0", None])
