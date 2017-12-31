@@ -23,6 +23,13 @@ BLSPUT        = namedtuple("BLSPUT", ["channel", "type", "sender", "item"])
 
 class dls_net_peer():
 
+    BLSDECISION = "BLSDECISION"
+    BLSACCEPTABLE = "BLSACCEPTABLE"
+    BLSLOCK = "BLSLOCK"
+    BLSACK = "BLSACK"
+    BLSASK = "BLSASK"
+    BLSPUT = "BLSPUT"
+
     def __init__(self, my_id, priv, addrs, pubs, channel_id, start_r=0):
         assert len(addrs) == len(pubs)
         self.N = len(addrs)
@@ -46,16 +53,43 @@ class dls_net_peer():
         self.current_state_machine = dls_state_machine((), self.i, self.N, self.round)
         self.old_blocks = []
 
+        # Buffers.
+        self.output = set()
+
     def i_am_leader(self, r=None):
         if r is None:
             r = self.round
         return self.current_state_machine.get_leader(r) == self.i
+
+
+    def build_decisions(self, bno):
+        # TODO: eventually store all decisions and memoize.
+        # BLSDECISION   = namedtuple("BLSDECISION", ["channel", "type", "sender", "bno", 
+        #                            "block", "signature"])
+
+        if bno < self.current_block_no:
+
+            d = BLSDECISION(channel = self.channel_id, 
+                            type  = self.BLSDECISION,
+                            sender  = self.addrs[self.i],
+                            bno     =  bno,
+                            block   = self.old_blocks[bno],
+                            signature = None)
+
+            return [d]
+
+        else:
+            return [] # No decisions yet!
 
     # Internal functions for IO.
     def put_messages(self, msgs):
         for msg in msgs:
             # Process here messages for previous blocks.
             if msg.bno < self.current_block_no:
+                for d in self.get_decision(msg.bno):
+                    resp = (msg.sender, d)
+                    self.output.add(resp)
+
                 pass # TODO: send stored decisions.
 
             if self.i_am_leader():
