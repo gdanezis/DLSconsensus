@@ -51,4 +51,3 @@ def test_put():
 
     peer.put_messages([put_msg])
     assert peer.to_be_sequenced == [ 7, 8 ]
-

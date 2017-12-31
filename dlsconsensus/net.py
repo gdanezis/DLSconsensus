@@ -107,8 +107,12 @@ class dls_net_peer():
             elif type(msg) == BLSDECISION:
                 sender_id = self.addrs.index(msg.sender)
                 phase = self.current_state_machine.get_leader(self.round)
-                sm_msg = PHASE0(dlsc.PHASE0, [ self.block ], phase, sender_id)
-                self.current_state_machine.put_messages([ sm_msg ])
+
+                # Simulate both a decision and an ack.
+                sm_msg = PHASE0(dlsc.PHASE0, [ msg.block ], phase, sender_id)
+                msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, phase, sender_id)
+
+                self.current_state_machine.put_messages([ sm_msg, msg_ack ])
                 continue
 
 # BLSACCEPTABLE = namedtuple("BLSACCEPTABLE", ["channel", "type", "sender", "bno", "phase", "blocks", "signature"])
@@ -158,7 +162,7 @@ class dls_net_peer():
             self.to_be_sequenced = [item for item in self.to_be_sequenced if item not in D]
             self.old_blocks += [ D ] # TODO: add evidence
 
-            ## Possibly reconfigure the shard here.
+            ## TODO: Possibly reconfigure the shard here.
 
             # Start new block
             proposal = tuple(self.to_be_sequenced)
