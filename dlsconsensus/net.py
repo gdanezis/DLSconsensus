@@ -1,4 +1,6 @@
 from .statemachine import dls_state_machine, PHASE0, PHASE1LOCK, PHASE2ACK, RELEASE3
+dlsc = dls_state_machine
+
 
 """ The state machine guarantees safety and liveness, but the actual messages it 
 processes do not actally do autentication, and are not compressed. This networking
@@ -56,6 +58,9 @@ class dls_net_peer():
         # Buffers.
         self.output = set()
 
+    def my_addr(self):
+        return self.addrs[self.i]
+
     def i_am_leader(self, r=None):
         if r is None:
             r = self.round
@@ -64,40 +69,74 @@ class dls_net_peer():
 
     def build_decisions(self, bno):
         # TODO: eventually store all decisions and memoize.
-        # BLSDECISION   = namedtuple("BLSDECISION", ["channel", "type", "sender", "bno", 
-        #                            "block", "signature"])
+        if not (bno < self.current_block_no):
+            return []
 
-        if bno < self.current_block_no:
+        d = BLSDECISION(channel = self.channel_id, 
+                        type  = self.BLSDECISION,
+                        sender  = self.my_addr(),
+                        bno     =  bno,
+                        block   = self.old_blocks[bno],
+                        signature = None)
+        return [ d ]
 
-            d = BLSDECISION(channel = self.channel_id, 
-                            type  = self.BLSDECISION,
-                            sender  = self.addrs[self.i],
-                            bno     =  bno,
-                            block   = self.old_blocks[bno],
-                            signature = None)
-
-            return [d]
-
-        else:
-            return [] # No decisions yet!
+    def insert_item(self, put_msg):
+        if put_msg.item not in self.sequence and put_msg.item not in self.to_be_sequenced:
+            self.to_be_sequenced += [ put_msg.item ]
 
     # Internal functions for IO.
     def put_messages(self, msgs):
         for msg in msgs:
+            if msg.channel != self.channel_id:
+                continue
+
+            if type(msg) == BLSPUT:
+                # Schedule the message for insertion in the next block.
+                self.insert_item(msg)
+                continue
+
             # Process here messages for previous blocks.
-            if msg.bno < self.current_block_no:
-                for d in self.get_decision(msg.bno):
+            elif msg.bno < self.current_block_no:
+                for d in self.build_decisions(msg.bno):
                     resp = (msg.sender, d)
                     self.output.add(resp)
+                continue
+        
+# BLSDECISION   = namedtuple("BLSDECISION", ["channel", "type", "sender", "bno", "block", "signature"])
 
-                pass # TODO: send stored decisions.
+            elif type(msg) == BLSDECISION:
+                sender_id = self.addrs.index(msg.sender)
+                phase = self.current_state_machine.get_leader(self.round)
+                sm_msg = PHASE0(dlsc.PHASE0, [ self.block ], phase, sender_id)
+                self.current_state_machine.put_messages([ sm_msg ])
+                continue
+
+# BLSACCEPTABLE = namedtuple("BLSACCEPTABLE", ["channel", "type", "sender", "bno", "phase", "blocks", "signature"])
+
+            elif type(msg) == BLSACCEPTABLE:
+                sender_id = self.addrs.index(msg.sender)
+                sm_msg = PHASE0(dlsc.PHASE0, self.blocks, self.phase, sender_id)
+                self.current_state_machine.put_messages([ sm_msg ])
+                continue
+    
+# BLSLOCK       = namedtuple("BLSLOCK", ["channel", "type", "sender", "bno", "phase", "block", "evidence", "signature"])
+
+            elif type(msg) == BLSLOCK:
+                sender_id = self.addrs.index(msg.sender)
+                msg_lock = PHASE1LOCK(dlsc.PHASE1LOCK, msg.block, msg.evidence, sender_id)
+                msg_release = RELEASE3(dlsc.RELEASE3, msg_lock)
+                self.current_state_machine.put_messages([ msg_lock, msg_release ])
+
+
+# BLSACK        = namedtuple("BLSACK", ["channel", "type", "sender", "bno", "phase", "block", "signature"])
+
+            elif type(msg) == BLSACK:
+                sender_id = self.addrs.index(msg.sender)
+                msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, msg.phase, sender_id)
+
 
             if self.i_am_leader():
-                pass # Wait for critical mass to arrive.
-            else:
-                # React to messages as they arrive.
-                pass
-
+                self.current_state_machine.process_round(False)
 
 # PHASE0 = namedtuple("PHASE0", ["type", "acceptable", "phase", "sender"])
 # PHASE1LOCK = namedtuple("PHASE1LOCK", ["type", "item", "phase", "evidence", "sender"])
