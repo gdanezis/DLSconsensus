@@ -3,8 +3,9 @@ from collections import namedtuple
 PHASE0 = namedtuple("PHASE0", ["type", "acceptable", "phase", "sender"])
 PHASE1LOCK = namedtuple("PHASE1LOCK", ["type", "item", "phase", "evidence", "sender"])
 PHASE2ACK = namedtuple("PHASE2ACK", ["type", "item", "phase", "sender"])
-RELEASE3 = namedtuple("RELEASE3", ["type", "evidence", "sender"])
+RELEASE3 = namedtuple("RELEASE3", ["type", "evidence", "phase", "sender"])
 
+valid_messages = set([ PHASE0, PHASE1LOCK, PHASE2ACK, RELEASE3 ])
 
 class dls_state_machine():
     """ A class representing all state of the DLS state machine for a single round. """
@@ -14,7 +15,8 @@ class dls_state_machine():
     PHASE2ACK = "PHASE2ACK"
     RELEASE3 = "RELEASE3"
 
-    def __init__(self, my_vi, my_id, N):
+    def __init__(self, my_vi, my_id, N, start_r = 0):
+        """ Initialize with an own value, own id and the number of peers. """
         assert 0 <= my_id < N 
         self.i = my_id 
 
@@ -22,7 +24,7 @@ class dls_state_machine():
         self.N = N
         self.f = (N-1) // 3
 
-        self.round = 0
+        self.round = start_r
         self.locks = {} # Contains locks associated with proof of acceptability.
         self.all_seen = set([ my_vi ])
 
@@ -41,6 +43,7 @@ class dls_state_machine():
         return self.get_leader_phase( self.get_phase_k(xround) )
 
     def get_leader_phase(self, phase):
+        """ Get the leader for a particular phase. """
         return phase % self.N        
 
     def get_round_type(self, xround):
@@ -83,6 +86,7 @@ class dls_state_machine():
         elif len(self.locks) == 1:
             return ( self.locks.keys()[0], )
         else:
+            print (len(self.locks), self.locks)
             assert False
 
 
@@ -150,10 +154,11 @@ class dls_state_machine():
 
 
     def process_lockrelease_3(self):
+        k = self.get_phase_k(self.round)
         for l in self.locks:
             assert len(self.locks[l]) == 5
 
-            msg = RELEASE3(self.RELEASE3, self.locks[l], self.i)
+            msg = RELEASE3(self.RELEASE3, self.locks[l], k, self.i)
             self.buf_out.add( msg )
             self.buf_in.add( msg )
 
@@ -183,13 +188,21 @@ class dls_state_machine():
             if msg.type == self.PHASE0:
                 self.all_seen |= set(msg.acceptable)
 
+    def clear_old_messages(self):
+        k = self.get_phase_k(self.round)
+        for msg in list(self.buf_in):
+            if msg.phase < k:
+                self.buf_in.remove(msg)
+
+
     def do_background(self):
         self.find_seen()
         self.process_release_locks()
+        self.clear_old_messages()
         self.process_acks()
 
-
     def process_round(self):
+        """ Run one round of the state machine. """
         process = [ self.process_trying_0, self.process_trying_1, 
                     self.process_trying_2, self.process_lockrelease_3 ] 
 
@@ -198,5 +211,19 @@ class dls_state_machine():
         process[rtype]()
 
         self.round += 1
+        return self.round
 
+    def put_messages(self, msgs):
+        """ Insert a set of messages into the state machine. """
+        if not all([ type(m) in valid_messages for m in msgs]):
+            raise Exception("Wrong input type.")
+
+        self.buf_in |= set(msgs)
+
+
+    def get_messages(self):
+        """ Get all the messages emited by the state machine. """
+        msgs = self.buf_out.copy()
+        self.buf_out.clear()
+        return msgs
 

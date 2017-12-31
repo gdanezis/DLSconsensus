@@ -155,9 +155,14 @@ def test_f_failures():
         for n in nodes:
             n.process_round()
             if n.i < n.N - n.f:
-                all_messages |= n.buf_out
+                all_messages |= n.get_messages()
         for n in nodes:
-            n.buf_in |= all_messages
+            n.put_messages(all_messages)
+
+        #print("Round: %s, Phase: %s" % (r, nodes[0].get_phase_k(r)))
+        #print([n.decision for n in nodes])
+        #print([len(n.buf_in) for n in nodes])
 
     assert set([nx.decision for nx in nodes[:3]]) == set(["Hello1"])
     assert set([nx.decision for nx in nodes]) == set(["Hello1", None])
+
