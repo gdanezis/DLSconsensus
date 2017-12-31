@@ -34,6 +34,9 @@ class dls_state_machine():
 
         self.decision = None
 
+    def get_decision(self):
+        return self.decision
+
     def get_phase_k(self, xround):
         """ Returns the ever increasing phase number. """
         return xround // 4
@@ -201,7 +204,7 @@ class dls_state_machine():
         self.clear_old_messages()
         self.process_acks()
 
-    def process_round(self):
+    def process_round(self, advance=True):
         """ Run one round of the state machine. """
         process = [ self.process_trying_0, self.process_trying_1, 
                     self.process_trying_2, self.process_lockrelease_3 ] 
@@ -210,7 +213,8 @@ class dls_state_machine():
         rtype = self.get_round_type(self.round)
         process[rtype]()
 
-        self.round += 1
+        if advance:
+            self.round += 1
         return self.round
 
     def put_messages(self, msgs):

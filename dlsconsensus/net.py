@@ -5,13 +5,25 @@ processes do not actally do autentication, and are not compressed. This networki
 library deals with the actual message formats, signatures, and efficiencies. It drives
 the state machine. """
 
+from collections import namedtuple
 import msgpack
 
+# Define here the messages
+
+# A decision is timeless, no need to specify a round number. It is also addressed to all.
+BLSDECISION   = namedtuple("BLSDECISION", ["channel", "type", "sender", "bno", "block", "signature"])
+BLSACCEPTABLE = namedtuple("BLSACCEPTABLE", ["channel", "type", "sender", "bno", "phase", "blocks", "signature"])
+BLSLOCK       = namedtuple("BLSLOCK", ["channel", "type", "sender", "bno", "phase", "block", "evidence", "signature"])
+BLSACK        = namedtuple("BLSACK", ["channel", "type", "sender", "bno", "phase", "block", "signature"])
+
+# User facing actions. No authentication needed.
+BLSASK        = namedtuple("BLSASK", ["channel", "type", "sender", "bno"])
+BLSPUT        = namedtuple("BLSPUT", ["channel", "type", "sender", "item"])
 
 
 class dls_net_peer():
 
-    def __init__(self, my_id, priv, addrs, pubs, channel_id):
+    def __init__(self, my_id, priv, addrs, pubs, channel_id, start_r=0):
         assert len(addrs) == len(pubs)
         self.N = len(addrs)
 
@@ -23,6 +35,7 @@ class dls_net_peer():
         self.pubs = pubs
 
         self.channel_id = channel_id
+        self.round =  start_r
 
         # Messages to be sequenced.
         self.to_be_sequenced = []
@@ -30,18 +43,58 @@ class dls_net_peer():
 
         # Blocks
         self.current_block_no = 0
-        self.current_state_machine = None
+        self.current_state_machine = dls_state_machine((), self.i, self.N, self.round)
         self.old_blocks = []
+
+    def i_am_leader(self, r=None):
+        if r is None:
+            r = self.round
+        return self.current_state_machine.get_leader(r) == self.i
 
     # Internal functions for IO.
     def put_messages(self, msgs):
-        pass
+        for msg in msgs:
+            # Process here messages for previous blocks.
+            if msg.bno < self.current_block_no:
+                pass # TODO: send stored decisions.
+
+            if self.i_am_leader():
+                pass # Wait for critical mass to arrive.
+            else:
+                # React to messages as they arrive.
+                pass
+
+
+# PHASE0 = namedtuple("PHASE0", ["type", "acceptable", "phase", "sender"])
+# PHASE1LOCK = namedtuple("PHASE1LOCK", ["type", "item", "phase", "evidence", "sender"])
+# PHASE2ACK = namedtuple("PHASE2ACK", ["type", "item", "phase", "sender"])
+# RELEASE3 = namedtuple("RELEASE3", ["type", "evidence", "phase", "sender"])
+
 
     def get_messages(self):
         pass
 
     def advance_round(self):
-        pass
+        D = self.current_state_machine.get_decision()
+        if D is None:
+            # No decision reached, continue the protocol.
+            pass
+        else:
+            # Decision reached, start the new block
+            self.sequence += list(D)
+            self.to_be_sequenced = [item for item in self.to_be_sequenced if item not in D]
+            self.old_blocks += [ D ] # TODO: add evidence
+
+            ## Possibly reconfigure the shard here.
+
+            # Start new block
+            proposal = tuple(self.to_be_sequenced)
+            self.current_block_no += 1
+            self.current_state_machine = dls_state_machine(proposal, self.i, self.N, self.round)
+
+        # Make a step
+        self.current_state_machine.process_round()
+        self.round += 1
 
     # External functions for sequencing.
 
