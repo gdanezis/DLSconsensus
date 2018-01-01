@@ -166,3 +166,28 @@ def test_f_failures():
     assert set([nx.decision for nx in nodes[:3]]) == set(["Hello1"])
     assert set([nx.decision for nx in nodes]) == set(["Hello1", None])
 
+def test_f_failures_start_later():
+    # In this test we simulate a perfectly synchronous network.
+    N = 4
+    nodes = []
+    for i in range(N):
+        dls = dls_state_machine(my_vi="Hello%s" % i, my_id=i, N=4, start_r = 1000)
+        nodes += [ dls ]
+
+    # In each round simulate behavious.
+    for r in range(50):
+        all_messages = set()
+        for n in nodes:
+            n.process_round()
+            if n.i < n.N - n.f:
+                all_messages |= n.get_messages()
+        for n in nodes:
+            n.put_messages(all_messages)
+
+        #print("Round: %s, Phase: %s" % (r, nodes[0].get_phase_k(r)))
+        #print([n.decision for n in nodes])
+        #print([len(n.buf_in) for n in nodes])
+
+    assert set([nx.decision for nx in nodes[:3]]) == set(["Hello0"])
+    assert set([nx.decision for nx in nodes]) == set(["Hello0", None])
+

@@ -34,6 +34,8 @@ class dls_state_machine():
 
         self.decision = None
 
+        self._trace = False
+
     def get_decision(self):
         return self.decision
 
@@ -99,8 +101,8 @@ class dls_state_machine():
         msg = PHASE0(self.PHASE0, acceptable, k, self.i)
         self.buf_out |= set(( msg, ))
 
-        if self.i == self.get_leader(self.round):
-            self.buf_in.add(msg)
+        # if self.i == self.get_leader(self.round):
+        self.buf_in.add(msg)
 
 
     def process_trying_1(self):
@@ -212,6 +214,18 @@ class dls_state_machine():
         self.do_background()
         rtype = self.get_round_type(self.round)
         process[rtype]()
+        
+        if self._trace:
+            r = self.round
+            p = self.get_phase_k(self.round)
+            l = self.get_leader(self.round)
+
+            print("")
+            print("-"*20 + " Round %s Phase %s Leader %s" % (r,p,l) + "-"*20)
+            print("-"*20 + " Locks " + "-"*20)
+
+            for l, v in self.locks.items():
+                print (l,v)
 
         if advance:
             self.round += 1
@@ -222,12 +236,41 @@ class dls_state_machine():
         if not all([ type(m) in valid_messages for m in msgs]):
             raise Exception("Wrong input type.")
 
+        # Check the senders are well formed:
+        for m in msgs:
+            assert 0 <= m[-1] < self.N
+
         self.buf_in |= set(msgs)
 
+        if self._trace:
+            r = self.round
+            p = self.get_phase_k(self.round)
+            l = self.get_leader(self.round)
+
+            print("")
+            print("-"*20 + " Round %s Phase %s Leader %s" % (r,p,l) + "-"*20)
+            print("-"*20 + " Inputs " + "-"*20)
+
+            for m in msgs:
+                print("- %s" % str(m))
 
     def get_messages(self):
         """ Get all the messages emited by the state machine. """
         msgs = self.buf_out.copy()
         self.buf_out.clear()
+
+        if self._trace:
+            r = self.round
+            p = self.get_phase_k(self.round)
+            l = self.get_leader(self.round)
+
+            print("")
+            print("-"*20 + " Round %s Phase %s Leader %s" % (r,p,l) + "-"*20)
+            print("-"*20 + " Outputs " + "-"*20)
+
+            for m in msgs:
+                print("- %s" % str(m))
+
+
         return msgs
 

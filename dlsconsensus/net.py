@@ -7,8 +7,9 @@ processes do not actally do autentication, and are not compressed. This networki
 library deals with the actual message formats, signatures, and efficiencies. It drives
 the state machine. """
 
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 import msgpack
+
 
 # Define here the messages
 
@@ -54,6 +55,7 @@ class dls_net_peer():
         self.current_block_no = 0
         self.current_state_machine = dls_state_machine((), self.i, self.N, self.round)
         self.old_blocks = []
+        self.decisions = defaultdict(set)
 
         # Buffers.
         self.output = set()
@@ -78,7 +80,11 @@ class dls_net_peer():
                         bno     =  bno,
                         block   = self.old_blocks[bno],
                         signature = None)
-        return [ d ]
+
+        if d not in self.decisions[bno]:
+            self.decisions[bno].add(d)
+
+        return list(self.decisions[bno])
 
     def insert_item(self, put_msg):
         if put_msg.item not in self.sequence and put_msg.item not in self.to_be_sequenced:
@@ -96,20 +102,27 @@ class dls_net_peer():
                 continue
 
             # Process here messages for previous blocks.
-            elif msg.bno < self.current_block_no:
+            elif msg.bno < self.current_block_no or msg.bno > self.current_block_no:
                 for d in self.build_decisions(msg.bno):
-                    resp = (msg.sender, d)
-                    self.output.add(resp)
+                    self.decisions[msg.bno].add(d)
+
+                    for resp in self.addrs:
+                        if resp != self.my_addr():                    
+                            resp = (msg.sender, d)
+                            self.output.add(resp)
                 continue
         
 # BLSDECISION   = namedtuple("BLSDECISION", ["channel", "type", "sender", "bno", "block", "signature"])
 
             elif type(msg) == BLSDECISION:
                 sender_id = self.addrs.index(msg.sender)
-                phase = self.current_state_machine.get_leader(self.round)
+                phase = self.current_state_machine.get_phase_k(self.round)
+
+                # Always save the decisions, and be ready to replay them.
+                self.decisions[self.current_block_no].add(msg)
 
                 # Simulate both a decision and an ack.
-                sm_msg = PHASE0(dlsc.PHASE0, [ msg.block ], phase, sender_id)
+                sm_msg = PHASE0(dlsc.PHASE0, ( msg.block, ), phase, sender_id)
                 msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, phase, sender_id)
 
                 self.current_state_machine.put_messages([ sm_msg, msg_ack ])
@@ -119,7 +132,7 @@ class dls_net_peer():
 
             elif type(msg) == BLSACCEPTABLE:
                 sender_id = self.addrs.index(msg.sender)
-                sm_msg = PHASE0(dlsc.PHASE0, self.blocks, self.phase, sender_id)
+                sm_msg = PHASE0(dlsc.PHASE0, msg.blocks, msg.phase, sender_id)
                 self.current_state_machine.put_messages([ sm_msg ])
                 continue
     
@@ -127,8 +140,8 @@ class dls_net_peer():
 
             elif type(msg) == BLSLOCK:
                 sender_id = self.addrs.index(msg.sender)
-                msg_lock = PHASE1LOCK(dlsc.PHASE1LOCK, msg.block, msg.evidence, sender_id)
-                msg_release = RELEASE3(dlsc.RELEASE3, msg_lock)
+                msg_lock = PHASE1LOCK(dlsc.PHASE1LOCK, msg.block, msg.phase, msg.evidence, sender_id)
+                msg_release = RELEASE3(dlsc.RELEASE3, msg_lock, msg.phase, sender_id)
                 self.current_state_machine.put_messages([ msg_lock, msg_release ])
 
 
@@ -137,10 +150,11 @@ class dls_net_peer():
             elif type(msg) == BLSACK:
                 sender_id = self.addrs.index(msg.sender)
                 msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, msg.phase, sender_id)
+                self.current_state_machine.put_messages([ msg_ack ])
 
 
-            if self.i_am_leader():
-                self.current_state_machine.process_round(False)
+            #if self.i_am_leader():
+            #    self.current_state_machine.process_round(False)
 
 # PHASE0 = namedtuple("PHASE0", ["type", "acceptable", "phase", "sender"])
 # PHASE1LOCK = namedtuple("PHASE1LOCK", ["type", "item", "phase", "evidence", "sender"])
@@ -148,13 +162,70 @@ class dls_net_peer():
 # RELEASE3 = namedtuple("RELEASE3", ["type", "evidence", "phase", "sender"])
 
 
+#BLSACCEPTABLE = namedtuple("BLSACCEPTABLE", ["channel", "type", "sender", "bno", 
+#                           "phase", "blocks", "signature"])
+#BLSLOCK       = namedtuple("BLSLOCK", ["channel", "type", "sender", "bno", 
+#                           "phase", "block", "evidence", "signature"])
+#BLSACK        = namedtuple("BLSACK", ["channel", "type", "sender", "bno", 
+#                           "phase", "block", "signature"])
+
+
+    def all_others(self):
+        all_receivers = self.addrs[:]
+        del all_receivers[self.i]
+        return all_receivers
+
+
     def get_messages(self):
-        pass
+        buf_out = self.current_state_machine.get_messages()
+        all_receivers = self.all_others()
+        if self.i_am_leader():
+            receivers = all_receivers
+        else:
+            leader = self.current_state_machine.get_leader(self.round)
+            receivers = [ self.addrs[leader] ] 
+
+
+        for msg in buf_out:
+            if type(msg) == PHASE0:
+                new_m = BLSACCEPTABLE(self.channel_id, self.BLSACCEPTABLE, self.my_addr(), self.current_block_no,
+                    msg.phase, msg.acceptable, None)
+
+                self.output |= set( (r, new_m) for r in receivers)
+
+            elif type(msg) == PHASE1LOCK:
+                new_m = BLSLOCK(self.channel_id, self.BLSACCEPTABLE, self.my_addr(), self.current_block_no,
+                    msg.phase, msg.item, msg.evidence, None)
+
+                self.output |= set( (r, new_m) for r in receivers)
+
+            elif type(msg) == PHASE2ACK:
+                new_m = BLSACK(self.channel_id, self.BLSACCEPTABLE, self.my_addr(), self.current_block_no,
+                    msg.phase, msg.item, None)
+
+                self.output |= set( (r, new_m) for r in receivers)
+
+            elif type(msg) == RELEASE3:
+                msg = msg.evidence
+                new_m = BLSLOCK(self.channel_id, self.BLSACCEPTABLE, self.addrs[msg.sender], self.current_block_no,
+                    msg.phase, msg.item, msg.evidence, None)
+
+                self.output |= set( (r, new_m) for r in all_receivers)
+                
+            else:
+                raise Exception()
+
+        out = list(self.output)
+        self.output.clear()
+        return out
 
     def advance_round(self):
         D = self.current_state_machine.get_decision()
         if D is None:
             # No decision reached, continue the protocol.
+            # But always include previous decisions in the processing.
+            self.put_messages(self.decisions[self.current_block_no])
+
             pass
         else:
             # Decision reached, start the new block
@@ -168,6 +239,14 @@ class dls_net_peer():
             proposal = tuple(self.to_be_sequenced)
             self.current_block_no += 1
             self.current_state_machine = dls_state_machine(proposal, self.i, self.N, self.round)
+
+            # register our own decision.
+            all_receivers = self.all_others()
+            D = self.build_decisions(self.current_block_no - 1)
+            for d in D:
+                for dest in self.all_others():
+                    self.output.add( (dest, d) )
+
 
         # Make a step
         self.current_state_machine.process_round()
