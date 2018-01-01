@@ -1,6 +1,6 @@
 from collections import namedtuple
 
-PHASE0 = namedtuple("PHASE0", ["type", "acceptable", "phase", "sender"])
+PHASE0 = namedtuple("PHASE0", ["type", "acceptable", "phase", "sender", "raw"])
 PHASE1LOCK = namedtuple("PHASE1LOCK", ["type", "item", "phase", "evidence", "sender"])
 PHASE2ACK = namedtuple("PHASE2ACK", ["type", "item", "phase", "sender"])
 RELEASE3 = namedtuple("RELEASE3", ["type", "evidence", "phase", "sender"])
