@@ -175,6 +175,7 @@ def test_many():
 
 
     bl = 0
+    number_of_messages = 0
 
     for r in range(200):
         peer["C"].current_state_machine._trace = False
@@ -183,6 +184,7 @@ def test_many():
             peer[p].advance_round()
             msgs = peer[p].get_messages()
             for (dest, msg) in msgs:
+                number_of_messages += 1
                 peer[dest].put_messages([ msg ])
 
         if set([peer[p].current_block_no for p in addrs]) == set([10]):       
@@ -193,7 +195,7 @@ def test_many():
             flag = "*"
             bl += 1 
 
-        print("%s %s" % (str([peer[p].current_block_no for p in addrs]), flag))
+        print("%s %s -- l=%d" % (str([peer[p].current_block_no for p in addrs]), flag, number_of_messages))
 
     assert set([peer[p].current_block_no for p in addrs]) == set([10])
     print([(peer[p].current_block_no, peer[p].old_blocks) for p in addrs])
