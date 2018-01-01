@@ -129,12 +129,12 @@ class dls_state_machine():
                     del evidence[acc]
 
             if len(evidence) > 0:
-                if self.vi in evidence:
-                    # prefer our own.
-                    item = self.vi
-                else:
+                #if self.vi in evidence:
+                #    # prefer our own.
+                #    item = self.vi
+                #else:
                     # Chose arbitrarily.
-                    item = max(evidence)
+                item = max(evidence)
 
                 evidence = tuple(evidence[item][1])
                 msg = PHASE1LOCK(self.PHASE1LOCK, item, k, evidence, self.i)
