@@ -173,11 +173,6 @@ def test_many():
                              pubs=["pubA","pubB","pubC","pubD"], channel_id="Shard0", 
                              start_r=10)
 
-
-    bl = 0
-    number_of_messages = 0
-    prev_number_of_messages = 0
-
     for r in range(200):
         peer["C"].current_state_machine._trace = False
 
@@ -187,21 +182,49 @@ def test_many():
             assert len(peer[p].output) == 0
 
             for (dest, msg) in msgs:
-                number_of_messages += 1
                 peer[dest].put_messages([ msg ])
 
         if set([peer[p].current_block_no for p in addrs]) == set([10]):       
             break
 
-        flag = ""
-        if set([peer[p].current_block_no for p in addrs]) == set([ bl ]):
-            flag = "*"
-            bl += 1 
+    assert set([peer[p].current_block_no for p in addrs]) == set([10])
+    print("")
+    #print([(peer[p].current_block_no, peer[p].old_blocks) for p in addrs])
+    print("Rounds: %s" % r)
 
-        delta = number_of_messages - prev_number_of_messages
-        print("%s %s -- l=%d (%d)" % (str([peer[p].current_block_no for p in addrs]), flag, number_of_messages, delta))
-        prev_number_of_messages = number_of_messages
+
+import random
+
+def test_many_load():
+
+    peer = {}
+    addrs=["A", "B", "C", "D"]
+    for i in range(4):
+        peer[addrs[i]] =  dls_net_peer(my_id=i, priv="priv", addrs=addrs, 
+                             pubs=["pubA","pubB","pubC","pubD"], channel_id="Shard0", 
+                             start_r=10)
+
+    for p in addrs:
+        peer[p].put_sequence("M%s" % p)
+
+    for r in range(200):
+        peer["C"].current_state_machine._trace = False
+
+        for p in addrs:
+            peer[p].advance_round()
+            msgs = peer[p].get_messages()
+            assert len(peer[p].output) == 0
+
+            if p == "A":
+                print(r, p, peer[p].current_state_machine.all_seen)
+
+            for (dest, msg) in msgs:
+                peer[dest].put_messages([ msg ])
+
+        if set([peer[p].current_block_no for p in addrs]) == set([10]):       
+            break
 
     assert set([peer[p].current_block_no for p in addrs]) == set([10])
+    print("")
     print([(peer[p].current_block_no, peer[p].old_blocks) for p in addrs])
     print("Rounds: %s" % r)

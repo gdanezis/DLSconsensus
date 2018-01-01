@@ -221,7 +221,6 @@ class dls_net_peer():
         out = list(self.output)
         self.output.clear()
         assert len(self.output) == 0
-        print(self.i, len(out), len(self.current_state_machine.buf_out))
 
         return out
 
@@ -260,7 +259,7 @@ class dls_net_peer():
 
     # External functions for sequencing.
 
-    def sequence(self, item):
+    def put_sequence(self, item):
         """ Schedules an item to be sequenced. """
         if item not in self.sequence:
             self.to_be_sequenced += [ item ]
