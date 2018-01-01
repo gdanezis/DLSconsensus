@@ -102,7 +102,7 @@ class dls_net_peer():
                 continue
 
             # Process here messages for previous blocks.
-            elif msg.bno < self.current_block_no or msg.bno > self.current_block_no:
+            elif type(msg) in (BLSACCEPTABLE, BLSLOCK, BLSACK, BLSASK) and (msg.bno < self.current_block_no or msg.bno > self.current_block_no):
                 for d in self.build_decisions(msg.bno):
                     self.decisions[msg.bno].add(d)
 
@@ -115,17 +115,20 @@ class dls_net_peer():
 # BLSDECISION   = namedtuple("BLSDECISION", ["channel", "type", "sender", "bno", "block", "signature"])
 
             elif type(msg) == BLSDECISION:
-                sender_id = self.addrs.index(msg.sender)
-                phase = self.current_state_machine.get_phase_k(self.round)
 
                 # Always save the decisions, and be ready to replay them.
-                self.decisions[self.current_block_no].add(msg)
+                self.decisions[msg.bno].add(msg)
 
-                # Simulate both a decision and an ack.
-                sm_msg = PHASE0(dlsc.PHASE0, ( msg.block, ), phase, sender_id)
-                msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, phase, sender_id)
+                if msg.bno == self.current_block_no:
 
-                self.current_state_machine.put_messages([ sm_msg, msg_ack ])
+                    sender_id = self.addrs.index(msg.sender)
+                    phase = self.current_state_machine.get_phase_k(self.round)
+
+                    # Simulate both a decision and an ack.
+                    sm_msg = PHASE0(dlsc.PHASE0, ( msg.block, ), phase, sender_id)
+                    msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, phase, sender_id)
+
+                    self.current_state_machine.put_messages([ sm_msg, msg_ack ])
                 continue
 
 # BLSACCEPTABLE = namedtuple("BLSACCEPTABLE", ["channel", "type", "sender", "bno", "phase", "blocks", "signature"])
@@ -178,13 +181,13 @@ class dls_net_peer():
 
     def get_messages(self):
         buf_out = self.current_state_machine.get_messages()
+
         all_receivers = self.all_others()
         if self.i_am_leader():
             receivers = all_receivers
         else:
             leader = self.current_state_machine.get_leader(self.round)
             receivers = [ self.addrs[leader] ] 
-
 
         for msg in buf_out:
             if type(msg) == PHASE0:
@@ -217,6 +220,9 @@ class dls_net_peer():
 
         out = list(self.output)
         self.output.clear()
+        assert len(self.output) == 0
+        print(self.i, len(out), len(self.current_state_machine.buf_out))
+
         return out
 
     def advance_round(self):
@@ -243,10 +249,10 @@ class dls_net_peer():
             # register our own decision.
             all_receivers = self.all_others()
             D = self.build_decisions(self.current_block_no - 1)
+
             for d in D:
                 for dest in self.all_others():
                     self.output.add( (dest, d) )
-
 
         # Make a step
         self.current_state_machine.process_round()
