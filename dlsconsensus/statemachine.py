@@ -58,7 +58,7 @@ class dls_state_machine():
     def check_phase1msg(self, msg):
 
         # Check the basic format.
-        if not (msg.type == self.PHASE1LOCK and len(msg) == 5):
+        if not (msg.type == self.PHASE1LOCK):
             return False
 
         # Only the leader can send in a specific phase.
@@ -68,7 +68,7 @@ class dls_state_machine():
         # Check all votes are valid.
         votes = set()
         for e in msg.evidence:
-            if not (e.type == self.PHASE0 and len(e) == 4):
+            if not (e.type == self.PHASE0):
                 return False
 
             if not (e.phase == msg.phase and msg.item in e.acceptable):
@@ -129,14 +129,15 @@ class dls_state_machine():
                     del evidence[acc]
 
             if len(evidence) > 0:
-                #if self.vi in evidence:
-                #    # prefer our own.
-                #    item = self.vi
-                #else:
+                if self.vi in evidence:
+                    # prefer our own.
+                    item = self.vi
+                else:
                     # Chose arbitrarily.
-                item = max(evidence)
+                    item = max(evidence)
 
-                evidence = tuple(evidence[item][1])
+                votes, evid_set = evidence[item]
+                evidence = tuple(evid_set)
                 msg = PHASE1LOCK(self.PHASE1LOCK, item, k, evidence, self.i)
                 self.buf_in.add(msg)
                 self.buf_out.add(msg)
@@ -238,7 +239,7 @@ class dls_state_machine():
 
         # Check the senders are well formed:
         for m in msgs:
-            assert 0 <= m[-1] < self.N
+            assert 0 <= m.sender < self.N
 
         self.buf_in |= set(msgs)
 

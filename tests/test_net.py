@@ -215,16 +215,12 @@ def test_many_load():
             msgs = peer[p].get_messages()
             assert len(peer[p].output) == 0
 
-            if p == "A":
-                print(r, p, peer[p].current_state_machine.all_seen)
-
             for (dest, msg) in msgs:
                 peer[dest].put_messages([ msg ])
 
         if set([peer[p].current_block_no for p in addrs]) == set([10]):       
             break
 
+    out = [(peer[p].current_block_no, peer[p].old_blocks) for p in addrs]
     assert set([peer[p].current_block_no for p in addrs]) == set([10])
-    print("")
-    print([(peer[p].current_block_no, peer[p].old_blocks) for p in addrs])
-    print("Rounds: %s" % r)
+    print("\nRounds: %s" % r)

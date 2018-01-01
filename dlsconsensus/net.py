@@ -101,8 +101,15 @@ class dls_net_peer():
                 self.insert_item(msg)
                 continue
 
+            if type(msg) == BLSACCEPTABLE:
+                # Schedule the message for insertion in the next block.
+                for blck in msg.blocks:
+                    for m in blck:
+                        self.put_sequence(m)
+
+
             # Process here messages for previous blocks.
-            elif type(msg) in (BLSACCEPTABLE, BLSLOCK, BLSACK, BLSASK) and (msg.bno < self.current_block_no or msg.bno > self.current_block_no):
+            if type(msg) in (BLSACCEPTABLE, BLSLOCK, BLSACK, BLSASK) and (msg.bno < self.current_block_no or msg.bno > self.current_block_no):
                 for d in self.build_decisions(msg.bno):
                     self.decisions[msg.bno].add(d)
 
@@ -231,7 +238,6 @@ class dls_net_peer():
             # But always include previous decisions in the processing.
             self.put_messages(self.decisions[self.current_block_no])
 
-            pass
         else:
             # Decision reached, start the new block
             self.sequence += list(D)
@@ -261,13 +267,10 @@ class dls_net_peer():
 
     def put_sequence(self, item):
         """ Schedules an item to be sequenced. """
-        if item not in self.sequence:
+        if item not in self.sequence and item not in self.to_be_sequenced:
             self.to_be_sequenced += [ item ]
 
     def get_sequence(self):
         """ Get the sequence of all items that are decided. """
         return self.sequence
-
-    def initiate_new_dls_session(self):
-        pass
 
