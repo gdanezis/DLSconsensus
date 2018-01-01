@@ -117,9 +117,9 @@ def test_lock():
     # prepare the evidence
     block = (7,8)
     ev = set()
-    ev.add(  PHASE0(dlsc.PHASE0, ("hello0",), k, 0)  )    
-    ev.add(  PHASE0(dlsc.PHASE0, ("hello0",), k, 1)  )    
-    ev.add(  PHASE0(dlsc.PHASE0, ("hello0",), k, 2)  )    
+    ev.add(  PHASE0(dlsc.PHASE0, ("hello0",), k, 0, "")  )    
+    ev.add(  PHASE0(dlsc.PHASE0, ("hello0",), k, 1, "")  )    
+    ev.add(  PHASE0(dlsc.PHASE0, ("hello0",), k, 2, "")  )    
 
 
     # BLSLOCK       = namedtuple("BLSLOCK", ["channel", "type", "sender", "bno", "phase", "block", "evidence", "signature"])

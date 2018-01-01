@@ -1,9 +1,9 @@
 from collections import namedtuple
 
 PHASE0 = namedtuple("PHASE0", ["type", "acceptable", "phase", "sender", "raw"])
-PHASE1LOCK = namedtuple("PHASE1LOCK", ["type", "item", "phase", "evidence", "sender"])
-PHASE2ACK = namedtuple("PHASE2ACK", ["type", "item", "phase", "sender"])
-RELEASE3 = namedtuple("RELEASE3", ["type", "evidence", "phase", "sender"])
+PHASE1LOCK = namedtuple("PHASE1LOCK", ["type", "item", "phase", "evidence", "sender", "raw"])
+PHASE2ACK = namedtuple("PHASE2ACK", ["type", "item", "phase", "sender", "raw"])
+RELEASE3 = namedtuple("RELEASE3", ["type", "evidence", "phase", "sender", "raw"])
 
 valid_messages = set([ PHASE0, PHASE1LOCK, PHASE2ACK, RELEASE3 ])
 
@@ -36,7 +36,14 @@ class dls_state_machine():
 
         self._trace = False
 
+        self.make_raw = lambda x: x
+
+    def set_make_raw(self, maker):
+        """ Set a function that packages the messages, with signatures, etc. """
+        self.make_raw =  maker
+
     def get_decision(self):
+        """ Get the decision for this state machine or None """
         return self.decision
 
     def get_phase_k(self, xround):
@@ -98,7 +105,8 @@ class dls_state_machine():
     def process_trying_0(self):
         acceptable = self.get_acceptable()
         k = self.get_phase_k(self.round)
-        msg = PHASE0(self.PHASE0, acceptable, k, self.i)
+        msg = PHASE0(self.PHASE0, acceptable, k, self.i, None)
+        msg = self.make_raw(msg)
         self.buf_out |= set(( msg, ))
 
         # if self.i == self.get_leader(self.round):
@@ -138,7 +146,8 @@ class dls_state_machine():
 
                 votes, evid_set = evidence[item]
                 evidence = tuple(evid_set)
-                msg = PHASE1LOCK(self.PHASE1LOCK, item, k, evidence, self.i)
+                msg = PHASE1LOCK(self.PHASE1LOCK, item, k, evidence, self.i, None)
+                msg = self.make_raw(msg)
                 self.buf_in.add(msg)
                 self.buf_out.add(msg)
 
@@ -152,7 +161,9 @@ class dls_state_machine():
 
                 self.locks[item] = msg
 
-                ack = PHASE2ACK(self.PHASE2ACK, item, k, self.i)
+                ack = PHASE2ACK(self.PHASE2ACK, item, k, self.i, None)
+                ack = self.make_raw(ack)
+
                 self.buf_out.add(ack)
 
                 if self.i == self.get_leader(self.round):
@@ -162,9 +173,10 @@ class dls_state_machine():
     def process_lockrelease_3(self):
         k = self.get_phase_k(self.round)
         for l in self.locks:
-            assert len(self.locks[l]) == 5
+            assert type(self.locks[l]) == PHASE1LOCK
 
-            msg = RELEASE3(self.RELEASE3, self.locks[l], k, self.i)
+            msg = RELEASE3(self.RELEASE3, self.locks[l], k, self.i, None)
+            msg = self.make_raw(msg)
             self.buf_out.add( msg )
             self.buf_in.add( msg )
 

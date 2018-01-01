@@ -132,8 +132,8 @@ class dls_net_peer():
                     phase = self.current_state_machine.get_phase_k(self.round)
 
                     # Simulate both a decision and an ack.
-                    sm_msg = PHASE0(dlsc.PHASE0, ( msg.block, ), phase, sender_id)
-                    msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, phase, sender_id)
+                    sm_msg = PHASE0(dlsc.PHASE0, ( msg.block, ), phase, sender_id, raw=msg)
+                    msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, phase, sender_id, raw=msg)
 
                     self.current_state_machine.put_messages([ sm_msg, msg_ack ])
                 continue
@@ -142,7 +142,7 @@ class dls_net_peer():
 
             elif type(msg) == BLSACCEPTABLE:
                 sender_id = self.addrs.index(msg.sender)
-                sm_msg = PHASE0(dlsc.PHASE0, msg.blocks, msg.phase, sender_id)
+                sm_msg = PHASE0(dlsc.PHASE0, msg.blocks, msg.phase, sender_id, raw=msg)
                 self.current_state_machine.put_messages([ sm_msg ])
                 continue
     
@@ -150,8 +150,8 @@ class dls_net_peer():
 
             elif type(msg) == BLSLOCK:
                 sender_id = self.addrs.index(msg.sender)
-                msg_lock = PHASE1LOCK(dlsc.PHASE1LOCK, msg.block, msg.phase, msg.evidence, sender_id)
-                msg_release = RELEASE3(dlsc.RELEASE3, msg_lock, msg.phase, sender_id)
+                msg_lock = PHASE1LOCK(dlsc.PHASE1LOCK, msg.block, msg.phase, msg.evidence, sender_id, raw=msg)
+                msg_release = RELEASE3(dlsc.RELEASE3, msg_lock, msg.phase, sender_id, raw=msg)
                 self.current_state_machine.put_messages([ msg_lock, msg_release ])
 
 
@@ -159,7 +159,7 @@ class dls_net_peer():
 
             elif type(msg) == BLSACK:
                 sender_id = self.addrs.index(msg.sender)
-                msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, msg.phase, sender_id)
+                msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, msg.phase, sender_id, raw=msg)
                 self.current_state_machine.put_messages([ msg_ack ])
 
 
