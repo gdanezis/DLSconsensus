@@ -1,13 +1,10 @@
-from collections import namedtuple
-import msgpack
+from hashlib import sha256
 
-
-PHASE0 = namedtuple("PHASE0", ["type", "acceptable", "phase", "sender", "raw"])
-PHASE1LOCK = namedtuple("PHASE1LOCK", ["type", "item", "phase", "evidence", "sender", "raw"])
-PHASE2ACK = namedtuple("PHASE2ACK", ["type", "item", "phase", "sender", "raw"])
-RELEASE3 = namedtuple("RELEASE3", ["type", "evidence", "phase", "sender", "raw"])
+from .types import *
+from .serialize import pack, unpack
 
 valid_messages = set([ PHASE0, PHASE1LOCK, PHASE2ACK, RELEASE3 ])
+
 
 class dls_state_machine():
     """ A class representing all state of the DLS state machine for a single round. """
@@ -17,7 +14,7 @@ class dls_state_machine():
     PHASE2ACK = "PHASE2ACK"
     RELEASE3 = "RELEASE3"
 
-    def __init__(self, my_vi, my_id, N, start_r = 0, make_raw = None):
+    def __init__(self, my_vi, my_id, N, start_r = 0, make_raw = None, backup_f = None):
         """ Initialize with an own value, own id and the number of peers. """
         assert 0 <= my_id < N 
 
@@ -42,9 +39,77 @@ class dls_state_machine():
         if self.make_raw == None:
             self.make_raw = lambda x: x
 
+        self.backup_f = backup_f
+        
     def persist(self):
-        data = [self.i, self.vi, self.N, list(self.all_seen), self.round, self.locks.items(), self.decision]
-        msgpack.packb(data)
+        data = (self.i, self.vi, self.N, self.all_seen, self.round, self.locks, self.decision)
+        
+        bindata = pack(data)
+        binhash = sha256(bindata).digest()[:16]
+
+        if self._trace:
+            print("Persist %s bytes" % len(bindata + binhash))
+
+        if self.backup_f is not None:
+            for f1 in self.backup_f:
+                f1.seek(0)
+                f1.write(bindata + binhash)
+                f1.truncate()
+                f1.flush()
+
+            if __debug__:
+                data2 = self.recover_from_f(f1)
+    
+    def recover_from_f(self, f1):
+        f1.seek(0)
+        raw = f1.read()
+        bindata = raw[:-16]
+        binhash = raw[-16:]
+        if sha256(bindata).digest()[:16] != binhash:
+            raise Excpetion("Digest mismatch")
+
+        data = unpack(bindata)
+        return data
+
+    def recover(self, just_check = False):
+        if self.backup_f is None:
+            raise Exception("No backup files available.")
+
+        errors = False
+
+        recovered = []
+        for f1 in self.backup_f:
+            try:
+                data = self.recover_from_f(f1)
+                recovered += [(data[4], data)]
+            except:
+                errors = True            
+             
+        if len(recovered) == 0:
+            raise Exception("All backups failed.")
+
+        # Take the higher round backup
+        data = max(recovered)[1]
+
+        if not just_check:
+            # Assign it
+            self.i, self.vi, self.N, self.all_seen, \
+                self.round, self.locks, self.decision = data
+        else:
+            # Check it is equal
+            all_ok = (self.i, self.vi, self.N, self.all_seen, \
+                self.round, self.locks, self.decision) == data
+
+            if not all_ok:
+                print("Mismatch:")
+                print((self.i, self.vi, self.N, self.all_seen, self.round, self.locks, self.decision))
+                print
+                print(data)
+                raise Exception("Backups are failing")
+
+        if errors:
+            # Since one or more of the backups were broken, we are now re-writing them.
+            pass # TODO
 
     def set_make_raw(self, maker):
         """ Set a function that packages the messages, with signatures, etc. """
@@ -296,6 +361,6 @@ class dls_state_machine():
             for m in msgs:
                 print("- %s" % str(m))
 
-
         return msgs
+
 
