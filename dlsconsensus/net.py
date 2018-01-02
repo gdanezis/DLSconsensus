@@ -269,7 +269,7 @@ class dls_net_peer():
 
         return out
 
-    def advance_round(self):
+    def advance_round(self, set_round = None):
         D = self.current_state_machine.get_decision()
         if D is None:
             # No decision reached, continue the protocol.
@@ -299,8 +299,11 @@ class dls_net_peer():
                     self.output.add( (dest, d) )
 
         # Make a step
-        self.current_state_machine.process_round()
-        self.round += 1
+        if set_round is not None and set_round > self.round:
+            self.round = set_round
+        else:
+            self.round += 1
+        self.current_state_machine.process_round(set_round = self.round)
 
     # External functions for sequencing.
 

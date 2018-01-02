@@ -154,7 +154,7 @@ def test_f_failures():
         all_messages = set()
         for n in nodes:
             n.process_round()
-            if n.i < n.N - n.f:
+            if n.i < n.N - n.faulty():
                 all_messages |= n.get_messages()
         for n in nodes:
             n.put_messages(all_messages)
@@ -179,7 +179,7 @@ def test_f_failures_start_later():
         all_messages = set()
         for n in nodes:
             n.process_round()
-            if n.i < n.N - n.f:
+            if n.i < n.N - n.faulty():
                 all_messages |= n.get_messages()
         for n in nodes:
             n.put_messages(all_messages)
@@ -213,29 +213,17 @@ def test_f_persist():
         if r % 11 == 0:
             nodes = []
             for i in range(N):
-                dls = dls_state_machine(my_vi="Hello%s" % i, my_id=i, N=4, backup_f=node_files[i])
-                dls.recover()
+                dls = dls_state_machine.from_recovery(backup_f=node_files[i])
                 nodes += [ dls ]
-        #else:
-        #    for dls in nodes:
-        #        # dls.persist()
-        #        dls.recover(just_check = True)
-
 
         all_messages = set()
         for n in nodes:
             n.process_round()
-            if n.i < n.N - n.f:
+            if n.i < n.N - n.faulty():
                 all_messages |= n.get_messages()
 
         for n in nodes:
             n.put_messages(all_messages)
-
-        # print([d.get_decision() for d in nodes])
-
-        #print("Round: %s, Phase: %s" % (r, nodes[0].get_phase_k(r)))
-        #print([n.decision for n in nodes])
-        #print([len(n.buf_in) for n in nodes])
 
     assert set([nx.decision for nx in nodes[:3]]) == set(["Hello1"])
     assert set([nx.decision for nx in nodes]) == set(["Hello1", None])

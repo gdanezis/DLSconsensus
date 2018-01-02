@@ -27,19 +27,22 @@ class dls_state_machine():
         self.locks = {} # Contains locks associated with proof of acceptability.
         self.decision = None
 
-        self.f = (N-1) // 3
-
         # In and out buffers for network IO.
         self.buf_in = set()
         self.buf_out = set()
 
         self._trace = False
-
-        self.make_raw = make_raw
-        if self.make_raw == None:
-            self.make_raw = lambda x: x
-
+        self.make_raw = make_raw if make_raw != None else lambda x: x
         self.backup_f = backup_f
+
+    def faulty(self):
+        return (self.N - 1) // 3
+
+    @staticmethod
+    def from_recovery(start_r = 0, make_raw = None, backup_f = None):
+        sm = dls_state_machine((), 0, 4, start_r, make_raw, backup_f)
+        sm.recover()
+        return sm
         
     def persist(self):
         data = (self.i, self.vi, self.N, self.all_seen, self.round, self.locks, self.decision)
@@ -157,7 +160,7 @@ class dls_state_machine():
             votes.add(e.sender)
 
         # Check quorum
-        if not (len(votes) >= (self.N - self.f)):
+        if not (len(votes) >= (self.N - self.faulty())):
             return False
 
         return True
@@ -206,7 +209,7 @@ class dls_state_machine():
             # Prune those with enough evidence:
             for acc in evidence.keys():
                 votes, _ = evidence[acc]
-                if len(votes) < self.N - self.f:
+                if len(votes) < self.N - self.faulty():
                     del evidence[acc]
 
             if len(evidence) > 0:
@@ -272,7 +275,7 @@ class dls_state_machine():
                     all_acks[msg.item] = set()
                 all_acks[msg.item].add( msg.sender )
 
-                if len(all_acks[msg.item]) >= self.N - self.f:
+                if len(all_acks[msg.item]) >= self.N - self.faulty():
                     self.decision = msg.item
 
     def find_seen(self):
@@ -293,7 +296,7 @@ class dls_state_machine():
         self.clear_old_messages()
         self.process_acks()
 
-    def process_round(self, advance=True):
+    def process_round(self, advance=True, set_round=None):
         """ Run one round of the state machine. """
         process = [ self.process_trying_0, self.process_trying_1, 
                     self.process_trying_2, self.process_lockrelease_3 ] 
@@ -318,7 +321,12 @@ class dls_state_machine():
         self.persist()
 
         if advance:
-            self.round += 1
+            if set_round is not None and set_round > self.round:
+                self.round = set_round
+            else:
+                self.round += 1
+
+
         return self.round
 
     def put_messages(self, msgs):
