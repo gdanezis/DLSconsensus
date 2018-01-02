@@ -216,6 +216,7 @@ def test_many_load():
             assert len(peer[p].output) == 0
 
             for (dest, msg) in msgs:
+                # assert msg.signature != None
                 peer[dest].put_messages([ msg ])
 
         if set([peer[p].current_block_no for p in addrs]) == set([10]):       
