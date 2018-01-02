@@ -65,13 +65,21 @@ class dls_net_peer():
         self.sigs = 0
 
     def pack_and_sign(self, msg):
+        # TODO: Use asymetric signatures
         assert type(msg) in [BLSACCEPTABLE, BLSLOCK, BLSACK, BLSDECISION]
         assert msg.signature == None
-        xtype = type(msg)
         bdata = sha256(msgpack.packb(msg[:-1])).hexdigest()
 
-        return msg._make(msg[:-1] + (bdata,))
+        m =  msg._make(msg[:-1] + (bdata,))
+        assert self.check_sign(m)
+        return m
 
+    def check_sign(self, msg):
+        # TODO: Use asymetric signatures
+        assert type(msg) in [BLSACCEPTABLE, BLSLOCK, BLSACK, BLSDECISION]
+        assert msg.signature != None
+        bdata = sha256(msgpack.packb(msg[:-1])).hexdigest()
+        return bdata == msg.signature
 
     def package_raw(self, msg):
         # If there is already a raw message, ignore.
@@ -262,6 +270,10 @@ class dls_net_peer():
                 self.output |= set( (r, new_m) for r in receivers)
 
             elif type(msg) == PHASE1LOCK:
+                for e in msg.evidence:
+                    assert e.raw != None
+                
+
                 new_m = BLSLOCK(self.channel_id, self.BLSACCEPTABLE, self.my_addr(), self.current_block_no,
                     msg.phase, msg.item, msg.evidence, None)
                 new_m = self.pack_and_sign(new_m)
