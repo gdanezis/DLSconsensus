@@ -117,7 +117,14 @@ class dls_net_peer():
 
     def build_decisions(self, bno):
         # TODO: eventually store all decisions and memoize.
-        if not (bno < self.current_block_no):
+        #if not (bno < self.current_block_no or (bno == self.current_block_no and )):
+        #    return []
+
+        if bno < self.current_block_no:
+            val = self.old_blocks[bno]
+        elif bno == self.current_block_no and self.current_state_machine.get_decision() != None:
+            val = self.current_state_machine.get_decision()
+        else:
             return []
 
         if self.my_addr() not in { dc.sender for dc in self.decisions[bno] }:
@@ -126,7 +133,7 @@ class dls_net_peer():
                             type  = self.BLSDECISION,
                             sender  = self.my_addr(),
                             bno     =  bno,
-                            block   = self.old_blocks[bno],
+                            block   = val,
                             signature = None)
             d = self.pack_and_sign(d)
             self.decisions[bno].add(d)
@@ -186,6 +193,14 @@ class dls_net_peer():
             return [ msg_ack ]
         assert False
 
+    def has_quorum(self):
+        bno = self.current_block_no
+        quorum = len(self.decisions[bno])
+        sm = self.current_state_machine
+
+        has_decision = (quorum >= sm.N - sm.faulty())
+        return has_decision
+
     # Internal functions for IO.
     def put_messages(self, msgs):
 
@@ -207,7 +222,10 @@ class dls_net_peer():
                         self.put_sequence(m)
 
             # Process here messages for previous blocks.
-            if type(msg) in (BLSACCEPTABLE, BLSLOCK, BLSACK, BLSASK) and (msg.bno < self.current_block_no or msg.bno > self.current_block_no):
+            bno = self.current_block_no
+            has_decision = msg.bno == bno and self.current_state_machine.get_decision() != None
+            has_decision |= (msg.bno < bno or msg.bno > bno)
+            if type(msg) in (BLSACCEPTABLE, BLSLOCK, BLSACK, BLSASK) and has_decision:
                 for d in self.build_decisions(msg.bno):
                     for resp in self.addrs:
                         if resp != self.my_addr():                    
@@ -246,8 +264,11 @@ class dls_net_peer():
         return out
 
     def advance_round(self, set_round = None):
-        D = self.current_state_machine.get_decision()
-        if D is None:
+        sm = self.current_state_machine
+        D = sm.get_decision()
+        if D is None or not self.has_quorum():
+            print(sm.i, len(self.decisions[self.current_block_no]))
+        #if not self.has_quorum() or D is None:
             # No decision reached, continue the protocol.
             # But always include previous decisions in the processing.
             self.put_messages(self.decisions[self.current_block_no])
