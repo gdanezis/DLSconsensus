@@ -1,4 +1,6 @@
 from collections import namedtuple
+import msgpack
+
 
 PHASE0 = namedtuple("PHASE0", ["type", "acceptable", "phase", "sender", "raw"])
 PHASE1LOCK = namedtuple("PHASE1LOCK", ["type", "item", "phase", "evidence", "sender", "raw"])
@@ -18,27 +20,31 @@ class dls_state_machine():
     def __init__(self, my_vi, my_id, N, start_r = 0, make_raw = None):
         """ Initialize with an own value, own id and the number of peers. """
         assert 0 <= my_id < N 
-        self.i = my_id 
 
+        # This is the key state that needs to be saved to persit the instance
+        self.i = my_id 
         self.vi = my_vi
         self.N = N
-        self.f = (N-1) // 3
-
+        self.all_seen = set([ my_vi ])
         self.round = start_r
         self.locks = {} # Contains locks associated with proof of acceptability.
-        self.all_seen = set([ my_vi ])
+        self.decision = None
+
+        self.f = (N-1) // 3
 
         # In and out buffers for network IO.
         self.buf_in = set()
         self.buf_out = set()
-
-        self.decision = None
 
         self._trace = False
 
         self.make_raw = make_raw
         if self.make_raw == None:
             self.make_raw = lambda x: x
+
+    def persist(self):
+        data = [self.i, self.vi, self.N, list(self.all_seen), self.round, self.locks.items(), self.decision]
+        msgpack.packb(data)
 
     def set_make_raw(self, maker):
         """ Set a function that packages the messages, with signatures, etc. """
@@ -242,6 +248,9 @@ class dls_state_machine():
 
             for l, v in self.locks.items():
                 print (l,v)
+
+        # Always persist before processing messages.
+        self.persist()
 
         if advance:
             self.round += 1
