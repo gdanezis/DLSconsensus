@@ -58,6 +58,9 @@ def test_decision():
     peer =  dls_net_peer(my_id=0, priv="priv", addrs=["A", "B", "C", "D"], 
                          pubs=["pubA","pubB","pubC","pubD"], channel_id="Shard0", 
                          start_r=10)
+    peerB =  dls_net_peer(my_id=1, priv="priv", addrs=["A", "B", "C", "D"], 
+                         pubs=["pubA","pubB","pubC","pubD"], channel_id="Shard0", 
+                         start_r=10)
 
     peer.current_block_no = 2
     peer.old_blocks += [(1,2,3), (4,5,6)]
@@ -70,6 +73,8 @@ def test_decision():
                      block=(7,8),
                      signature=None)
 
+    decision_msg = peerB.pack_and_sign(decision_msg)
+
     peer.put_messages([decision_msg])
     buf_in = peer.current_state_machine.buf_in
     sm = peer.current_state_machine
@@ -80,6 +85,9 @@ def test_decision():
 
 def test_acceptable():
     peer =  dls_net_peer(my_id=0, priv="priv", addrs=["A", "B", "C", "D"], 
+                         pubs=["pubA","pubB","pubC","pubD"], channel_id="Shard0", 
+                         start_r=10)
+    peerB =  dls_net_peer(my_id=1, priv="priv", addrs=["A", "B", "C", "D"], 
                          pubs=["pubA","pubB","pubC","pubD"], channel_id="Shard0", 
                          start_r=10)
 
@@ -97,6 +105,8 @@ def test_acceptable():
                      blocks=((7,8),),
                      signature=None)
 
+    acceptable_msg = peerB.pack_and_sign(acceptable_msg)
+
     peer.put_messages([acceptable_msg])
     buf_in = sm.buf_in
     
@@ -108,6 +118,12 @@ def test_lock():
     peer =  dls_net_peer(my_id=0, priv="priv", addrs=["A", "B", "C", "D"], 
                          pubs=["pubA","pubB","pubC","pubD"], channel_id="Shard0", 
                          start_r=10)
+    peerB =  dls_net_peer(my_id=1, priv="priv", addrs=["A", "B", "C", "D"], 
+                         pubs=["pubA","pubB","pubC","pubD"], channel_id="Shard0", 
+                         start_r=10)
+    peerC =  dls_net_peer(my_id=2, priv="priv", addrs=["A", "B", "C", "D"], 
+                         pubs=["pubA","pubB","pubC","pubD"], channel_id="Shard0", 
+                         start_r=10)
 
     peer.current_block_no = 2
     peer.old_blocks += [(1,2,3), (4,5,6)]
@@ -117,9 +133,9 @@ def test_lock():
     # prepare the evidence
     block = (7,8)
     ev = set()
-    ev.add(  PHASE0(dlsc.PHASE0, ("hello0",), k, 0, "")  )    
-    ev.add(  PHASE0(dlsc.PHASE0, ("hello0",), k, 1, "")  )    
-    ev.add(  PHASE0(dlsc.PHASE0, ("hello0",), k, 2, "")  )    
+    ev.add(  peer.package_raw(PHASE0(dlsc.PHASE0, ("hello0",), k, 0, None))  )    
+    ev.add(  peerB.package_raw(PHASE0(dlsc.PHASE0, ("hello0",), k, 1, None))  )    
+    ev.add(  peerC.package_raw(PHASE0(dlsc.PHASE0, ("hello0",), k, 2, None))  )    
 
 
     # BLSLOCK       = namedtuple("BLSLOCK", ["channel", "type", "sender", "bno", "phase", "block", "evidence", "signature"])
@@ -130,8 +146,10 @@ def test_lock():
                 bno=2,
                 phase=k,
                 block=block,
-                evidence=tuple(ev),
+                evidence=tuple(e.raw for e in ev),
                 signature=None)
+
+    lock_msg = peerB.pack_and_sign(lock_msg)
 
     peer.put_messages([lock_msg])
     buf_in = sm.buf_in
@@ -143,6 +161,10 @@ def test_ack():
     peer =  dls_net_peer(my_id=0, priv="priv", addrs=["A", "B", "C", "D"], 
                          pubs=["pubA","pubB","pubC","pubD"], channel_id="Shard0", 
                          start_r=10)
+    peerB =  dls_net_peer(my_id=1, priv="priv", addrs=["A", "B", "C", "D"], 
+                         pubs=["pubA","pubB","pubC","pubD"], channel_id="Shard0", 
+                         start_r=10)
+
 
     peer.current_block_no = 2
     peer.old_blocks += [(1,2,3), (4,5,6)]
@@ -157,6 +179,8 @@ def test_ack():
                      phase=k,
                      block=(7,8),
                      signature=None)
+
+    ack_msg = peerB.pack_and_sign(ack_msg)
 
     peer.put_messages([ack_msg])
     buf_in = sm.buf_in
