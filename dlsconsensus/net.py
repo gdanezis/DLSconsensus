@@ -49,9 +49,6 @@ class dls_net_peer():
         # Buffers.
         self.output = set()
 
-        # Counters
-        self.sigs = 0
-
     def pack_and_sign(self, msg):
         # TODO: Use asymetric signatures
         assert type(msg) in [BLSACCEPTABLE, BLSLOCK, BLSACK, BLSDECISION]
@@ -74,15 +71,10 @@ class dls_net_peer():
         if msg.raw is not None:
             return msg
 
-        self.sigs += 1
-
         assert msg.sender == self.i
         our_addr = self.addrs[self.i]
 
         if type(msg) == PHASE0:
-            #BLSACCEPTABLE = namedtuple("BLSACCEPTABLE", ["channel", "type", "sender", "bno", 
-            #                           "phase", "blocks", "signature"])
-
             data = BLSACCEPTABLE(self.channel_id, self.BLSACCEPTABLE, our_addr, 
                     self.current_block_no, msg.phase, msg.acceptable, None)
 
@@ -90,9 +82,6 @@ class dls_net_peer():
             return PHASE0._make(msg[:-1] + ( bls_msg, ) )
 
         elif type(msg) == PHASE1LOCK:
-            #BLSLOCK       = namedtuple("BLSLOCK", ["channel", "type", "sender", "bno", 
-            #                           "phase", "block", "evidence", "signature"])
-
             eve = tuple(sorted(e.raw for e in msg.evidence))
             data = BLSLOCK( self.channel_id, self.BLSLOCK, our_addr, 
                      self.current_block_no, msg.phase, msg.item, eve, None)
@@ -101,9 +90,6 @@ class dls_net_peer():
             return PHASE1LOCK._make( msg[:-1] + (bls_msg, ) )
 
         elif type(msg) == PHASE2ACK:
-            #BLSACK        = namedtuple("BLSACK", ["channel", "type", "sender", "bno", 
-            #                           "phase", "block", "signature"])
-
             data = BLSACK( self.channel_id, self.BLSACK, our_addr, 
                      self.current_block_no, msg.phase, msg.item, None)
             bls_msg = self.pack_and_sign(data)
@@ -111,15 +97,11 @@ class dls_net_peer():
             return PHASE2ACK._make( msg[:-1] + (bls_msg,) )
 
         elif type(msg) == RELEASE3:
-            #BLSLOCK       = namedtuple("BLSLOCK", ["channel", "type", "sender", "bno", 
-            #                           "phase", "block", "evidence", "signature"])
             raw = msg.evidence.raw
             return RELEASE3._make(msg[:-1] + (raw,) )
 
         else:
-            pass
-
-        raise Exception("Wrong type: %s" % type(msg))
+            raise Exception("Wrong type: %s" % type(msg))
 
 
     def my_addr(self):
@@ -179,13 +161,9 @@ class dls_net_peer():
                 return [ sm_msg, msg_ack ]
             return []
 
-# BLSACCEPTABLE = namedtuple("BLSACCEPTABLE", ["channel", "type", "sender", "bno", "phase", "blocks", "signature"])
-
         elif type(msg) == BLSACCEPTABLE:
             sm_msg = PHASE0(dlsc.PHASE0, msg.blocks, msg.phase, sender_id, raw=msg)
             return [ sm_msg ]            
-
-# BLSLOCK       = namedtuple("BLSLOCK", ["channel", "type", "sender", "bno", "phase", "block", "evidence", "signature"])
 
         elif type(msg) == BLSLOCK:
 
@@ -202,8 +180,6 @@ class dls_net_peer():
             msg_lock = PHASE1LOCK(dlsc.PHASE1LOCK, msg.block, msg.phase, eve, sender_id, raw=msg)
             msg_release = RELEASE3(dlsc.RELEASE3, msg_lock, msg.phase, sender_id, raw=msg)
             return [ msg_lock, msg_release ]
-
-# BLSACK        = namedtuple("BLSACK", ["channel", "type", "sender", "bno", "phase", "block", "signature"])
 
         elif type(msg) == BLSACK:
             msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, msg.phase, sender_id, raw=msg)
@@ -288,7 +264,6 @@ class dls_net_peer():
             proposal = tuple(self.to_be_sequenced)
             self.current_block_no += 1
             self.current_state_machine = dls_state_machine(proposal, self.i, self.N, self.round, make_raw = self.package_raw)
-            # self.current_state_machine.make_raw = self.package_raw
 
             # register our own decision.
             all_receivers = self.all_others()
