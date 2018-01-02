@@ -15,7 +15,7 @@ class dls_state_machine():
     PHASE2ACK = "PHASE2ACK"
     RELEASE3 = "RELEASE3"
 
-    def __init__(self, my_vi, my_id, N, start_r = 0):
+    def __init__(self, my_vi, my_id, N, start_r = 0, make_raw = None):
         """ Initialize with an own value, own id and the number of peers. """
         assert 0 <= my_id < N 
         self.i = my_id 
@@ -36,7 +36,9 @@ class dls_state_machine():
 
         self._trace = False
 
-        self.make_raw = lambda x: x
+        self.make_raw = make_raw
+        if self.make_raw == None:
+            self.make_raw = lambda x: x
 
     def set_make_raw(self, maker):
         """ Set a function that packages the messages, with signatures, etc. """
@@ -177,6 +179,7 @@ class dls_state_machine():
 
             msg = RELEASE3(self.RELEASE3, self.locks[l], k, self.i, None)
             msg = self.make_raw(msg)
+
             self.buf_out.add( msg )
             self.buf_in.add( msg )
 

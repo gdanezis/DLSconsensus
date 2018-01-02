@@ -53,7 +53,7 @@ class dls_net_peer():
 
         # Blocks
         self.current_block_no = 0
-        self.current_state_machine = dls_state_machine((), self.i, self.N, self.round)
+        self.current_state_machine = dls_state_machine((), self.i, self.N, self.round, self.package_raw)
         self.old_blocks = []
         self.decisions = defaultdict(set)
 
@@ -78,7 +78,6 @@ class dls_net_peer():
             return msg
 
         self.sigs += 1
-
 
         assert msg.sender == self.i
         our_addr = self.addrs[self.i]
@@ -116,9 +115,7 @@ class dls_net_peer():
         elif type(msg) == RELEASE3:
             #BLSLOCK       = namedtuple("BLSLOCK", ["channel", "type", "sender", "bno", 
             #                           "phase", "block", "evidence", "signature"])
-
             raw = msg.evidence.raw
-            assert raw != None
             return RELEASE3._make(msg[:-1] + (raw,) )
 
         else:
@@ -161,7 +158,10 @@ class dls_net_peer():
 
     # Internal functions for IO.
     def put_messages(self, msgs):
+
         for msg in msgs:
+            assert type(msg) in [BLSPUT, BLSASK, BLSACCEPTABLE, BLSLOCK, BLSACK, BLSDECISION]
+
             if msg.channel != self.channel_id:
                 continue
 
@@ -276,12 +276,6 @@ class dls_net_peer():
 
             elif type(msg) == RELEASE3:
                 new_m = msg.raw
-                print("!!!!!!!!!", new_m)
-                assert type(new_m) in [BLSLOCK, BLSDECISION]
-                #new_m = BLSLOCK(self.channel_id, self.BLSACCEPTABLE, self.addrs[msg.sender], self.current_block_no,
-                #    msg.phase, msg.item, msg.evidence, None)
-                #new_m = self.pack_and_sign(new_m)
-
                 self.output |= set( (r, new_m) for r in all_receivers)
                 
             else:
@@ -311,8 +305,9 @@ class dls_net_peer():
             # Start new block
             proposal = tuple(self.to_be_sequenced)
             self.current_block_no += 1
-            self.current_state_machine = dls_state_machine(proposal, self.i, self.N, self.round)
-            self.current_state_machine.make_raw = self.package_raw
+            assert self.package_raw != None
+            self.current_state_machine = dls_state_machine(proposal, self.i, self.N, self.round, make_raw = self.package_raw)
+            # self.current_state_machine.make_raw = self.package_raw
 
             # register our own decision.
             all_receivers = self.all_others()
