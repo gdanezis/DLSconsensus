@@ -275,7 +275,9 @@ class dls_net_peer():
                 self.output |= set( (r, new_m) for r in receivers)
 
             elif type(msg) == RELEASE3:
-                msg = msg.evidence.raw
+                new_m = msg.raw
+                print("!!!!!!!!!", new_m)
+                assert type(new_m) in [BLSLOCK, BLSDECISION]
                 #new_m = BLSLOCK(self.channel_id, self.BLSACCEPTABLE, self.addrs[msg.sender], self.current_block_no,
                 #    msg.phase, msg.item, msg.evidence, None)
                 #new_m = self.pack_and_sign(new_m)
