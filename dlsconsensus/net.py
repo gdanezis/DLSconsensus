@@ -150,17 +150,19 @@ class dls_net_peer():
         if not (bno < self.current_block_no):
             return []
 
-        d = BLSDECISION(channel = self.channel_id, 
-                        type  = self.BLSDECISION,
-                        sender  = self.my_addr(),
-                        bno     =  bno,
-                        block   = self.old_blocks[bno],
-                        signature = None)
-        d = self.pack_and_sign(d)
+        if self.my_addr() not in { dc.sender for dc in self.decisions[bno] }:
 
-        if d not in self.decisions[bno]:
+            d = BLSDECISION(channel = self.channel_id, 
+                            type  = self.BLSDECISION,
+                            sender  = self.my_addr(),
+                            bno     =  bno,
+                            block   = self.old_blocks[bno],
+                            signature = None)
+            d = self.pack_and_sign(d)
             self.decisions[bno].add(d)
-
+            
+        assert self.my_addr() in { dc.sender for dc in self.decisions[bno] }
+        assert len(self.decisions[bno]) <= self.N
         return list(self.decisions[bno])
 
     def insert_item(self, put_msg):
@@ -168,7 +170,7 @@ class dls_net_peer():
             self.to_be_sequenced += [ put_msg.item ]
 
 
-    def decode_message(self, msg):
+    def decode_raw(self, msg):
         sender_id = self.addrs.index(msg.sender)
         if not self.check_sign(msg):
             return []
@@ -176,7 +178,9 @@ class dls_net_peer():
         if type(msg) == BLSDECISION:
 
             # Always save the decisions, and be ready to replay them.
-            self.decisions[msg.bno].add(msg)
+            if msg.sender not in { dc.sender for dc in self.decisions[msg.bno] }:
+                self.decisions[msg.bno].add(msg)
+                assert len(self.decisions[msg.bno]) <= self.N
 
             if msg.bno == self.current_block_no:
                 # Simulate both a decision and an ack.
@@ -199,11 +203,9 @@ class dls_net_peer():
 
             eve = []
             for e in msg.evidence:
-                if not (type(e) in [BLSDECISION, BLSACCEPTABLE]):
-                    print(e)
-
-                assert type(e) in [BLSDECISION, BLSACCEPTABLE]
-                outers = [m for m in self.decode_message(e) if type(m) == PHASE0]
+                if not(type(e) in [BLSDECISION, BLSACCEPTABLE] or self.check_sign(e)):
+                    return []
+                outers = [m for m in self.decode_raw(e) if type(m) == PHASE0]
                 if not ( len(outers) == 1 ):
                     return []
                 eve += [ outers.pop(0) ]
@@ -243,8 +245,6 @@ class dls_net_peer():
             # Process here messages for previous blocks.
             if type(msg) in (BLSACCEPTABLE, BLSLOCK, BLSACK, BLSASK) and (msg.bno < self.current_block_no or msg.bno > self.current_block_no):
                 for d in self.build_decisions(msg.bno):
-                    self.decisions[msg.bno].add(d)
-
                     for resp in self.addrs:
                         if resp != self.my_addr():                    
                             resp = (msg.sender, d)
@@ -252,7 +252,7 @@ class dls_net_peer():
                 continue
         
             else:
-                in_msgs = self.decode_message(msg)
+                in_msgs = self.decode_raw(msg)
                 self.current_state_machine.put_messages(in_msgs)
 
 
@@ -318,10 +318,13 @@ class dls_net_peer():
 
     def put_sequence(self, item):
         """ Schedules an item to be sequenced. """
+
+        # TODO: Possibly do some filtering here?
+
         if item not in self.sequence and item not in self.to_be_sequenced:
             self.to_be_sequenced += [ item ]
 
     def get_sequence(self):
         """ Get the sequence of all items that are decided. """
-        return self.sequence
+        return self.sequence[:]
 
