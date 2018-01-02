@@ -42,7 +42,7 @@ class dls_net_peer():
 
         # Blocks
         self.current_block_no = 0
-        self.current_state_machine = dls_state_machine((), self.i, self.N, self.round, self.package_raw)
+        self.sm = dls_state_machine((), self.i, self.N, self.round, self.package_raw)
         self.old_blocks = []
         self.decisions = defaultdict(set)
 
@@ -112,7 +112,7 @@ class dls_net_peer():
         """ Returns whether the peer is the leader for a round r."""
         if r is None:
             r = self.round
-        return self.current_state_machine.get_leader(r) == self.i
+        return self.sm.get_leader(r) == self.i
 
 
     def build_decisions(self, bno):
@@ -122,8 +122,8 @@ class dls_net_peer():
 
         if bno < self.current_block_no:
             val = self.old_blocks[bno]
-        elif bno == self.current_block_no and self.current_state_machine.get_decision() != None:
-            val = self.current_state_machine.get_decision()
+        elif bno == self.current_block_no and self.sm.get_decision() != None:
+            val = self.sm.get_decision()
         else:
             return []
 
@@ -161,7 +161,7 @@ class dls_net_peer():
 
             if msg.bno == self.current_block_no:
                 # Simulate both a decision and an ack.
-                phase = self.current_state_machine.get_phase_k(self.round)
+                phase = self.sm.get_phase_k(self.round)
                 sm_msg = PHASE0(dlsc.PHASE0, ( msg.block, ), phase, sender_id, raw=msg)
                 msg_ack = PHASE2ACK(dlsc.PHASE2ACK, msg.block, phase, sender_id, raw=msg)
 
@@ -196,7 +196,7 @@ class dls_net_peer():
     def has_quorum(self):
         bno = self.current_block_no
         quorum = len(self.decisions[bno])
-        sm = self.current_state_machine
+        sm = self.sm
 
         has_decision = (quorum >= sm.N - sm.faulty())
         return has_decision
@@ -223,7 +223,7 @@ class dls_net_peer():
 
             # Process here messages for previous blocks.
             bno = self.current_block_no
-            has_decision = msg.bno == bno and self.current_state_machine.get_decision() != None
+            has_decision = msg.bno == bno and self.sm.get_decision() != None
             has_decision |= (msg.bno < bno or msg.bno > bno)
             if type(msg) in (BLSACCEPTABLE, BLSLOCK, BLSACK, BLSASK) and has_decision:
                 for d in self.build_decisions(msg.bno):
@@ -235,7 +235,7 @@ class dls_net_peer():
         
             else:
                 in_msgs = self.decode_raw(msg)
-                self.current_state_machine.put_messages(in_msgs)
+                self.sm.put_messages(in_msgs)
 
 
     def all_others(self):
@@ -245,13 +245,13 @@ class dls_net_peer():
 
 
     def get_messages(self):
-        buf_out = self.current_state_machine.get_messages()
+        buf_out = self.sm.get_messages()
 
         all_receivers = self.all_others()
         if self.i_am_leader():
             receivers = all_receivers
         else:
-            leader = self.current_state_machine.get_leader(self.round)
+            leader = self.sm.get_leader(self.round)
             receivers = [ self.addrs[leader] ] 
 
         for msg in buf_out:
@@ -264,11 +264,8 @@ class dls_net_peer():
         return out
 
     def advance_round(self, set_round = None):
-        sm = self.current_state_machine
-        D = sm.get_decision()
+        D = self.sm.get_decision()
         if D is None or not self.has_quorum():
-            print(sm.i, len(self.decisions[self.current_block_no]))
-        #if not self.has_quorum() or D is None:
             # No decision reached, continue the protocol.
             # But always include previous decisions in the processing.
             self.put_messages(self.decisions[self.current_block_no])
@@ -284,7 +281,7 @@ class dls_net_peer():
             # Start new block
             proposal = tuple(self.to_be_sequenced)
             self.current_block_no += 1
-            self.current_state_machine = dls_state_machine(proposal, self.i, self.N, self.round, make_raw = self.package_raw)
+            self.sm = dls_state_machine(proposal, self.i, self.N, self.round, make_raw = self.package_raw)
 
             # register our own decision.
             all_receivers = self.all_others()
@@ -299,7 +296,7 @@ class dls_net_peer():
             self.round = set_round
         else:
             self.round += 1
-        self.current_state_machine.process_round(set_round = self.round)
+        self.sm.process_round(set_round = self.round)
 
     # External functions for sequencing.
 

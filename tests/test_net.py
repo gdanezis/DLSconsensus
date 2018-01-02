@@ -76,8 +76,8 @@ def test_decision():
     decision_msg = peerB.pack_and_sign(decision_msg)
 
     peer.put_messages([decision_msg])
-    buf_in = peer.current_state_machine.buf_in
-    sm = peer.current_state_machine
+    buf_in = peer.sm.buf_in
+    sm = peer.sm
     assert len(buf_in) == 2
     assert set(m.type for m in buf_in) == set([ sm.PHASE0, sm.PHASE2ACK ])
 
@@ -93,7 +93,7 @@ def test_acceptable():
 
     peer.current_block_no = 2
     peer.old_blocks += [(1,2,3), (4,5,6)]
-    sm = peer.current_state_machine
+    sm = peer.sm
     k = sm.get_phase_k(peer.round)
 
     # BLSACCEPTABLE = namedtuple("BLSACCEPTABLE", ["channel", "type", "sender", "bno", "phase", "blocks", "signature"])
@@ -127,7 +127,7 @@ def test_lock():
 
     peer.current_block_no = 2
     peer.old_blocks += [(1,2,3), (4,5,6)]
-    sm = peer.current_state_machine
+    sm = peer.sm
     k = sm.get_phase_k(peer.round)
 
     # prepare the evidence
@@ -168,7 +168,7 @@ def test_ack():
 
     peer.current_block_no = 2
     peer.old_blocks += [(1,2,3), (4,5,6)]
-    sm = peer.current_state_machine
+    sm = peer.sm
     k = sm.get_phase_k(peer.round)
 
     # BLSACK        = namedtuple("BLSACK", ["channel", "type", "sender", "bno", "phase", "block", "signature"])
@@ -198,7 +198,7 @@ def test_many():
                              start_r=10)
 
     for r in range(200):
-        peer["C"].current_state_machine._trace = False
+        peer["C"].sm._trace = False
 
         for p in addrs:
             peer[p].advance_round()
@@ -232,7 +232,7 @@ def test_many_load():
         peer[p].put_sequence("M%s" % p)
 
     for r in range(200):
-        peer["C"].current_state_machine._trace = False
+        peer["C"].sm._trace = False
 
         for p in addrs:
             peer[p].advance_round()
