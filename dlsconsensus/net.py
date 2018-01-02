@@ -10,6 +10,7 @@ the state machine. """
 from collections import namedtuple, defaultdict
 import msgpack
 
+from hashlib import sha256
 
 # Define here the messages
 
@@ -67,7 +68,7 @@ class dls_net_peer():
         assert type(msg) in [BLSACCEPTABLE, BLSLOCK, BLSACK, BLSDECISION]
         assert msg.signature == None
         xtype = type(msg)
-        bdata = msgpack.packb(msg[:-1])
+        bdata = sha256(msgpack.packb(msg[:-1])).hexdigest()
 
         return msg._make(msg[:-1] + (bdata,))
 
