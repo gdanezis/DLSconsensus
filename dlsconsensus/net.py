@@ -325,9 +325,7 @@ class dls_net_peer():
 
     def get_sequence(self):
         """ Get the sequence of all items that are decided. """
-
-        assert list(self.seq.get_sequence()) == self.sequence[:]
-        return self.sequence[:]
+        return list(self.seq.get_sequence())
 
 
 
