@@ -4,6 +4,7 @@ sys.path = [".", ".."] + sys.path
 from dlsconsensus import dls_net_peer, BLSASK, BLSPUT, BLSDECISION, BLSACCEPTABLE, BLSLOCK, BLSACK
 from dlsconsensus import PHASE0
 from dlsconsensus import dls_state_machine as dlsc
+from dlsconsensus import pack, unpack
 
 def test_init():
     peer =  dls_net_peer(my_id=0, priv="priv", addrs=["A", "B", "C", "D"], 
@@ -241,7 +242,9 @@ def test_many_load():
 
             for (dest, msg) in msgs:
                 # assert msg.signature != None
-                peer[dest].put_messages([ msg ])
+                m = pack(msg)
+                m2 = unpack(m)
+                peer[dest].put_messages([ m2 ])
 
         if set([peer[p].current_block_no for p in addrs]) == set([10]):       
             break
@@ -249,3 +252,6 @@ def test_many_load():
     out = [(peer[p].current_block_no, peer[p].old_blocks) for p in addrs]
     assert set([peer[p].current_block_no for p in addrs]) == set([10])
     print("\nRounds: %s" % r)
+
+    for px in peer.values():
+        assert set( px.get_sequence() ) == set(["MA", "MB", "MC", "MD"])

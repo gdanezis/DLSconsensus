@@ -62,7 +62,7 @@ class dls_state_machine():
 
             if __debug__:
                 data2 = self.recover_from_f(f1)
-    
+
     def recover_from_f(self, f1):
         f1.seek(0)
         raw = f1.read()

@@ -1,5 +1,7 @@
 from .types import *
 from .statemachine import dls_state_machine
+from .serialize import pack, unpack
+
 dlsc = dls_state_machine
 
 
@@ -9,7 +11,6 @@ library deals with the actual message formats, signatures, and efficiencies. It 
 the state machine. """
 
 from collections import namedtuple, defaultdict
-import msgpack
 
 from hashlib import sha256
 
@@ -49,11 +50,15 @@ class dls_net_peer():
         # Buffers.
         self.output = set()
 
+        # Experimental
+        self.seq = dls_sequence()
+
     def pack_and_sign(self, msg):
         # TODO: Use asymetric signatures
         assert type(msg) in [BLSACCEPTABLE, BLSLOCK, BLSACK, BLSDECISION]
         assert msg.signature == None
-        bdata = sha256(msgpack.packb(msg[:-1] + ( msg.sender, ))).hexdigest()
+        m2 = msg[:-1] 
+        bdata = sha256(pack(m2 + ( msg.sender, ))).hexdigest()
 
         m =  msg._make(msg[:-1] + (bdata,))
         assert self.check_sign(m)
@@ -63,7 +68,7 @@ class dls_net_peer():
         # TODO: Use asymetric signatures
         assert type(msg) in [BLSACCEPTABLE, BLSLOCK, BLSACK, BLSDECISION]
         assert msg.signature != None
-        bdata = sha256(msgpack.packb(msg[:-1]  + ( msg.sender, ))).hexdigest()
+        bdata = sha256(pack(msg[:-1]  + ( msg.sender, ))).hexdigest()
         return bdata == msg.signature
 
     def package_raw(self, msg):
@@ -145,6 +150,7 @@ class dls_net_peer():
     def insert_item(self, put_msg):
         if put_msg.item not in self.sequence and put_msg.item not in self.to_be_sequenced:
             self.to_be_sequenced += [ put_msg.item ]
+            self.seq.put_item(put_msg.item)
 
 
     def decode_raw(self, msg):
@@ -276,20 +282,27 @@ class dls_net_peer():
             self.to_be_sequenced = [item for item in self.to_be_sequenced if item not in D]
             self.old_blocks += [ D ] # TODO: add evidence
 
-            ## TODO: Possibly reconfigure the shard here.
+            self.seq.set_block(self.current_block_no, D)
 
-            # Start new block
-            proposal = tuple(self.to_be_sequenced)
-            self.current_block_no += 1
-            self.sm = dls_state_machine(proposal, self.i, self.N, self.round, make_raw = self.package_raw)
+            ## TODO: Possibly reconfigure the shard here.
 
             # register our own decision.
             all_receivers = self.all_others()
-            D = self.build_decisions(self.current_block_no - 1)
+            D = self.build_decisions(self.current_block_no)
 
             for d in D:
                 for dest in self.all_others():
                     self.output.add( (dest, d) )
+
+
+            # Start new block
+            self.current_block_no += 1
+
+            proposal0 = self.seq.new_block(self.current_block_no)
+            proposal = tuple(self.to_be_sequenced)
+            assert set(proposal) == set(proposal0)
+            self.sm = dls_state_machine(proposal, self.i, self.N, self.round, make_raw = self.package_raw)
+
 
         # Make a step
         if set_round is not None and set_round > self.round:
@@ -308,7 +321,55 @@ class dls_net_peer():
         if item not in self.sequence and item not in self.to_be_sequenced:
             self.to_be_sequenced += [ item ]
 
+        self.seq.put_item(item)
+
     def get_sequence(self):
         """ Get the sequence of all items that are decided. """
+
+        assert list(self.seq.get_sequence()) == self.sequence[:]
         return self.sequence[:]
 
+
+
+class dls_sequence():
+
+    def __init__(self):
+        # Messages to be sequenced.
+
+        self.bno = 0
+        self.to_be_sequenced = set()
+        self.sequence = set()
+
+        self.old_blocks = []
+
+    def get_sequence(self):
+        for b in self.old_blocks:
+            for item in b:
+                yield item
+
+    def put_item(self, item):
+        if item not in self.sequence and item not in self.to_be_sequenced:
+            self.to_be_sequenced.add( item )
+
+    def check_block(self, bno, block):
+        if bno != self.bno:
+            return False
+
+        for item in block:
+            self.put_item(item)
+
+        return all(item not in self.sequence for item in block)
+        
+    def set_block(self, bno, block):
+        if bno != self.bno:
+            raise Exception("Wrong block number, next is %s" % len(self.old_blocks))
+
+        self.sequence |= set(block)
+        self.to_be_sequenced = set(item for item in self.to_be_sequenced if item not in block)
+        self.bno += 1
+        self.old_blocks += [ block ]
+
+    def new_block(self, bno):
+        block = tuple(self.to_be_sequenced)
+        assert self.check_block(bno, block)
+        return block
