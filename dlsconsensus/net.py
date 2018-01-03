@@ -10,7 +10,7 @@ processes do not actally do autentication, and are not compressed. This networki
 library deals with the actual message formats, signatures, and efficiencies. It drives
 the state machine. """
 
-from collections import namedtuple, defaultdict
+from collections import namedtuple, defaultdict, Counter
 
 from hashlib import sha256
 
@@ -37,14 +37,9 @@ class dls_net_peer():
         self.channel_id = channel_id
         self.round =  start_r
 
-        # Messages to be sequenced.
-        self.to_be_sequenced = []
-        self.sequence = []
-
         # Blocks
         self.current_block_no = 0
         self.sm = dls_state_machine((), self.i, self.N, self.round, self.package_raw)
-        self.old_blocks = []
         self.decisions = defaultdict(set)
 
         # Buffers.
@@ -121,12 +116,8 @@ class dls_net_peer():
 
 
     def build_decisions(self, bno):
-        # TODO: eventually store all decisions and memoize.
-        #if not (bno < self.current_block_no or (bno == self.current_block_no and )):
-        #    return []
-
         if bno < self.current_block_no:
-            val = self.old_blocks[bno]
+            val = self.has_quorum(bno)
         elif bno == self.current_block_no and self.sm.get_decision() != None:
             val = self.sm.get_decision()
         else:
@@ -148,9 +139,7 @@ class dls_net_peer():
         return list(self.decisions[bno])
 
     def insert_item(self, put_msg):
-        if put_msg.item not in self.sequence and put_msg.item not in self.to_be_sequenced:
-            self.to_be_sequenced += [ put_msg.item ]
-            self.seq.put_item(put_msg.item)
+        self.seq.put_item(put_msg.item)
 
 
     def decode_raw(self, msg):
@@ -199,13 +188,24 @@ class dls_net_peer():
             return [ msg_ack ]
         assert False
 
-    def has_quorum(self):
-        bno = self.current_block_no
-        quorum = len(self.decisions[bno])
+    def has_quorum(self, bno=None):
+        if bno == None:
+            bno = self.current_block_no
+        
+        if bno not in self.decisions or len(self.decisions[bno]) == 0:
+            return None
+        
+        my_block = Counter(msg.block for msg in self.decisions[bno])
+        [(block, votes)] = my_block.most_common(1)
         sm = self.sm
 
-        has_decision = (quorum >= sm.N - sm.faulty())
-        return has_decision
+        has_decision = (votes >= sm.N - sm.faulty())
+        
+        if has_decision:
+            return block
+        else:
+            return None
+
 
     # Internal functions for IO.
     def put_messages(self, msgs):
@@ -270,19 +270,15 @@ class dls_net_peer():
         return out
 
     def advance_round(self, set_round = None):
-        D = self.sm.get_decision()
-        if D is None or not self.has_quorum():
+        if self.has_quorum() == None:
             # No decision reached, continue the protocol.
             # But always include previous decisions in the processing.
             self.put_messages(self.decisions[self.current_block_no])
 
         else:
             # Decision reached, start the new block
-            self.sequence += list(D)
-            self.to_be_sequenced = [item for item in self.to_be_sequenced if item not in D]
-            self.old_blocks += [ D ] # TODO: add evidence
-
-            self.seq.set_block(self.current_block_no, D)
+            decision = self.has_quorum()
+            self.seq.set_block(self.current_block_no, decision)
 
             ## TODO: Possibly reconfigure the shard here.
 
@@ -294,14 +290,11 @@ class dls_net_peer():
                 for dest in self.all_others():
                     self.output.add( (dest, d) )
 
-
             # Start new block
             self.current_block_no += 1
 
             proposal0 = self.seq.new_block(self.current_block_no)
-            proposal = tuple(self.to_be_sequenced)
-            assert set(proposal) == set(proposal0)
-            self.sm = dls_state_machine(proposal, self.i, self.N, self.round, make_raw = self.package_raw)
+            self.sm = dls_state_machine(proposal0, self.i, self.N, self.round, make_raw = self.package_raw)
 
 
         # Make a step
@@ -315,12 +308,6 @@ class dls_net_peer():
 
     def put_sequence(self, item):
         """ Schedules an item to be sequenced. """
-
-        # TODO: Possibly do some filtering here?
-
-        if item not in self.sequence and item not in self.to_be_sequenced:
-            self.to_be_sequenced += [ item ]
-
         self.seq.put_item(item)
 
     def get_sequence(self):
@@ -330,6 +317,9 @@ class dls_net_peer():
 
 
 class dls_sequence():
+    """ A class that manges the state and the validity rules. 
+    Despite containing a lot of state this instance is not critical, 
+    and all state should be re-buildable from the list of decisions held by the peer."""
 
     def __init__(self):
         # Messages to be sequenced.

@@ -16,7 +16,7 @@ def test_decision():
                          start_r=10)
 
     peer.current_block_no = 2
-    peer.old_blocks += [(1,2,3), (4,5,6)]
+    peer.seq.old_blocks += [(1,2,3), (4,5,6)]
     get_msg = BLSASK(channel="Shard0", 
                      type=peer.BLSASK, 
                      sender="Client1", 
@@ -35,7 +35,7 @@ def test_put():
                          start_r=10)
 
     peer.current_block_no = 2
-    peer.old_blocks += [(1,2,3), (4,5,6)]
+    peer.seq.old_blocks += [(1,2,3), (4,5,6)]
     put_msg = BLSPUT(channel="Shard0", 
                      type=peer.BLSASK, 
                      sender="Client1", 
@@ -43,9 +43,9 @@ def test_put():
 
     peer.put_messages([put_msg])
     assert len(peer.output) == 0
-    assert peer.to_be_sequenced == [ 7 ]
+    assert peer.seq.to_be_sequenced == { 7 }
     peer.put_messages([put_msg])
-    assert peer.to_be_sequenced == [ 7 ]
+    assert peer.seq.to_be_sequenced == { 7 }
 
     put_msg = BLSPUT(channel="Shard0", 
                      type=peer.BLSASK, 
@@ -53,7 +53,7 @@ def test_put():
                      item=8)
 
     peer.put_messages([put_msg])
-    assert peer.to_be_sequenced == [ 7, 8 ]
+    assert peer.seq.to_be_sequenced == { 7, 8 }
 
 def test_decision():
     peer =  dls_net_peer(my_id=0, priv="priv", addrs=["A", "B", "C", "D"], 
@@ -64,7 +64,7 @@ def test_decision():
                          start_r=10)
 
     peer.current_block_no = 2
-    peer.old_blocks += [(1,2,3), (4,5,6)]
+    peer.seq.old_blocks += [(1,2,3), (4,5,6)]
 
     # BLSDECISION   = namedtuple("BLSDECISION", ["channel", "type", "sender", "bno", "block", "signature"])
     decision_msg = BLSDECISION(channel="Shard0", 
@@ -93,7 +93,7 @@ def test_acceptable():
                          start_r=10)
 
     peer.current_block_no = 2
-    peer.old_blocks += [(1,2,3), (4,5,6)]
+    peer.seq.old_blocks += [(1,2,3), (4,5,6)]
     sm = peer.sm
     k = sm.get_phase_k(peer.round)
 
@@ -127,7 +127,7 @@ def test_lock():
                          start_r=10)
 
     peer.current_block_no = 2
-    peer.old_blocks += [(1,2,3), (4,5,6)]
+    peer.seq.old_blocks += [(1,2,3), (4,5,6)]
     sm = peer.sm
     k = sm.get_phase_k(peer.round)
 
@@ -168,7 +168,7 @@ def test_ack():
 
 
     peer.current_block_no = 2
-    peer.old_blocks += [(1,2,3), (4,5,6)]
+    peer.seq.old_blocks += [(1,2,3), (4,5,6)]
     sm = peer.sm
     k = sm.get_phase_k(peer.round)
 
@@ -214,7 +214,7 @@ def test_many():
 
     assert set([peer[p].current_block_no for p in addrs]) == set([10])
     print("")
-    #print([(peer[p].current_block_no, peer[p].old_blocks) for p in addrs])
+    #print([(peer[p].current_block_no, peer[p].seq.old_blocks) for p in addrs])
     print("Rounds: %s" % r)
 
 
@@ -249,7 +249,7 @@ def test_many_load():
         if set([peer[p].current_block_no for p in addrs]) == set([10]):       
             break
 
-    out = [(peer[p].current_block_no, peer[p].old_blocks) for p in addrs]
+    out = [(peer[p].current_block_no, peer[p].seq.old_blocks) for p in addrs]
     assert set([peer[p].current_block_no for p in addrs]) == set([10])
     print("\nRounds: %s" % r)
 
